@@ -1,0 +1,316 @@
+import { create } from 'zustand';
+import { getFirebaseAuth } from '../firebase';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { eventBus, Events } from '../lib/componentEventBus';
+import { authService } from '../services/authService';
+import { updateTokenCache } from '../services/apiClient';
+import { clearAdminToken, getAdminToken, setAdminToken } from '../services/tokenStorage';
+import { LEGACY_ADMIN_TOKEN_KEY } from './authStore';
+
+const decodeJwt = (token: string): Record<string, unknown> | null => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    const decoded = JSON.parse(jsonPayload);
+
+    // Validate decoded structure
+    if (!decoded || typeof decoded !== 'object') {
+      throw new Error('Decoded JWT payload is not a valid object');
+    }
+
+    return decoded;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (e: any) {
+    // 🛡️ অডিটর ফিক্স: সাইলেন্ট ফেইলর ব্লাস্ট করে ইন্টারনাল ডায়াগনস্টিক ট্রেস এনফোর্স (টোকেন লিক প্রতিরোধ)
+    console.warn("⚠️ [JWT_DECODE_ERROR]: Failed to safely parse admin JWT token.", {
+      error_message: e?.message || 'Malformed JWT structure',
+      timestamp: new Date().toISOString(),
+    });
+    return null;
+  }
+};
+
+// বাংলা মন্তব্য: ব্যাকএন্ড provisioning_uri না দিলে ক্লায়েন্ট-সাইডে otpauth URI তৈরি করে QR দেখানো হয়।
+const buildProvisioningUri = (email: string, secret: string): string =>
+  `otpauth://totp/SupremeAI:${encodeURIComponent(email)}?secret=${secret}&issuer=SupremeAI&digits=6&period=30`;
+
+const persistAdminToken = (token: unknown): token is string => {
+  if (typeof token !== 'string' || token.trim().length < 20) return false;
+  // Issue #521 (FE-04): sessionStorage only — the localStorage duplicate write
+  // (which survived browser restarts) is gone; legacy entries are swept by
+  // tokenStorage's read path and by handleAdminLogout/clearAuthToken.
+  setAdminToken(token);
+  updateTokenCache(token);
+  return true;
+};
+
+interface AdminState {
+  adminAuthenticated: boolean;
+  adminRole: string | null;
+  setAdminRole: (val: string | null) => void;
+  adminError: string;
+  setAdminError: (val: string) => void;
+  handleAdminLogin: (password?: string) => Promise<void>;
+  handleAdminLogout: () => void;
+  actionStatus: string;
+  setActionStatus: (val: string) => void;
+  adminSubTab: string;
+  setAdminSubTab: (tab: string) => void;
+  adminEmail: string;
+  setAdminEmail: (val: string) => void;
+  otpRequired: boolean;
+  setOtpRequired: (val: boolean) => void;
+  adminOtp: string;
+  setAdminOtp: (val: string) => void;
+  rememberBrowser: boolean;
+  setRememberBrowser: (val: boolean) => void;
+  totpSetupRequired: boolean;
+  setTotpSetupRequired: (val: boolean) => void;
+  totpSecret: string;
+  setTotpSecret: (val: string) => void;
+  provisioningUri: string;
+  setProvisioningUri: (val: string) => void;
+  recoveryCodes: string[];
+  recoveryCode: string;
+  setRecoveryCode: (val: string) => void;
+  recoverTotp: () => Promise<void>;
+  resetTotpSetup: () => Promise<void>;
+}
+
+const getInitialAdminToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    // Issue #521: tokenStorage read — sessionStorage first, legacy localStorage
+    // entries are migrated (and removed) on first read.
+    return getAdminToken();
+  } catch (err) {
+    console.warn('[adminStore] initial admin token read failed, using fallback:', err);
+    return null;
+  }
+};
+
+const initialToken = getInitialAdminToken();
+const initialDecoded = initialToken ? decodeJwt(initialToken) : null;
+const isInitialTokenValid = Boolean(
+  initialDecoded &&
+  typeof initialDecoded.exp === 'number' &&
+  initialDecoded.exp * 1000 > Date.now()
+);
+
+if (isInitialTokenValid && initialToken) {
+  updateTokenCache(initialToken);
+}
+
+export const useAdminStore = create<AdminState>((set, get) => ({
+  adminAuthenticated: isInitialTokenValid,
+  adminRole: isInitialTokenValid && initialDecoded?.role === 'admin' ? 'admin' : null,
+  setAdminRole: (val) => set({ adminRole: val }),
+  adminError: '',
+  setAdminError: (val) => set({ adminError: val }),
+  actionStatus: '',
+  setActionStatus: (val) => set({ actionStatus: val }),
+  adminSubTab: 'dashboard',
+  setAdminSubTab: (tab) => set({ adminSubTab: tab }),
+  adminEmail: '',
+  setAdminEmail: (val) => set({ adminEmail: val }),
+  otpRequired: false,
+  setOtpRequired: (val) => set({ otpRequired: val }),
+  adminOtp: '',
+  setAdminOtp: (val) => set({ adminOtp: val }),
+  rememberBrowser: false,
+  setRememberBrowser: (val) => set({ rememberBrowser: val }),
+  totpSetupRequired: false,
+  setTotpSetupRequired: (val) => set({ totpSetupRequired: val }),
+  totpSecret: '',
+  setTotpSecret: (val) => set({ totpSecret: val }),
+  provisioningUri: '',
+  setProvisioningUri: (val) => set({ provisioningUri: val }),
+  recoveryCodes: [],
+  recoveryCode: '',
+  setRecoveryCode: (val) => set({ recoveryCode: val }),
+  recoverTotp: async () => {
+    set({ adminError: '' });
+    try {
+      const auth = await getFirebaseAuth();
+      const user = auth.currentUser;
+      if (!user) throw new Error('Session expired. Please login again.');
+      const data = await authService.firebaseTotpRecover(await user.getIdToken(true), get().recoveryCode);
+      set({ totpSetupRequired: true, otpRequired: true, totpSecret: data.secret, provisioningUri: data.provisioning_uri, recoveryCode: '' });
+    } catch (err) {
+      set({ adminError: err instanceof Error ? err.message : 'Recovery failed.' });
+    }
+  },
+  handleAdminLogin: async (password?: string) => {
+    const { adminEmail, otpRequired, adminOtp, rememberBrowser } = get();
+    const cleanEmail = adminEmail.trim();
+    const cleanPassword = password?.trim() || '';
+
+    if (!otpRequired && (!cleanEmail || !cleanPassword)) return;
+    set({ adminError: '' });
+
+    try {
+
+      // বাংলা মন্তব্য: getFirebaseAuth() ব্যবহার করা হচ্ছে যাতে Firebase app ইনিশিয়ালাইজেশন (initializeApp) সঠিকভাবে সম্পন্ন হয়
+      const auth = await getFirebaseAuth();
+
+      let idToken = '';
+
+      if (!otpRequired) {
+        // Step 1: Firebase Email/Password Authentication
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+          idToken = await userCredential.user.getIdToken(true);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (authErr: any) {
+          console.error("Firebase Auth Error:", authErr);
+          const firebaseErrMsg = typeof authErr?.message === 'string' 
+            ? authErr.message 
+            : (authErr?.code ? `Auth error: ${authErr.code}` : (authErr && typeof authErr === 'object' ? JSON.stringify(authErr) : 'Invalid email or password.'));
+          set({ adminError: String(firebaseErrMsg) });
+          return;
+        }
+
+        // Step 2: Send Firebase Token to Backend for Role/TOTP check
+        const data = await authService.firebaseLogin(idToken);
+
+        if (data.status === 'trusted_browser' && persistAdminToken(data.token)) {
+          const decoded = decodeJwt(data.token);
+          set({ adminAuthenticated: true, adminRole: decoded?.role === 'admin' ? 'admin' : null });
+          eventBus.emit(Events.AUTH_LOGIN, { source: 'admin_store', timestamp: Date.now() });
+          return;
+        }
+
+        if (data.status === 'otp_required') {
+          set({ otpRequired: true });
+        } else if (data.status === 'totp_setup_required') {
+          // Initiate TOTP Setup
+          try {
+            const setupData = await authService.firebaseTotpSetup(idToken);
+            set({
+              totpSetupRequired: true,
+              otpRequired: true,
+      totpSecret: setupData.secret,
+      recoveryCodes: setupData.recovery_codes || [],
+      provisioningUri: setupData.provisioning_uri || buildProvisioningUri(cleanEmail, setupData.secret || '')
+            });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } catch (setupErr: any) {
+            const errStr = typeof setupErr?.message === 'string' ? setupErr.message : 'Failed to setup TOTP.';
+            set({ adminError: errStr });
+          }
+        } else if (persistAdminToken(data.token)) {
+            const decoded = decodeJwt(data.token);
+            if (!decoded) {
+              set({ adminError: 'Authentication token is invalid. Please sign in again.' });
+              return;
+            }
+            set({ adminAuthenticated: true, adminRole: decoded?.role === 'admin' ? 'admin' : null });
+            eventBus.emit(Events.AUTH_LOGIN, { source: 'admin_store', timestamp: Date.now() });
+        } else {
+          set({ adminError: 'Not authorized as admin.' });
+        }
+      } else {
+        // Step 3: Verify TOTP
+        // We need the ID token again. Since the user just logged in, they are in auth.currentUser
+        const user = auth.currentUser;
+        if (!user) {
+          set({ adminError: 'Session expired. Please login again.' });
+          set({ otpRequired: false });
+          return;
+        }
+        idToken = await user.getIdToken();
+
+        try {
+          const data = await authService.firebaseTotpVerify(idToken, adminOtp.trim(), rememberBrowser);
+          if (persistAdminToken(data.token)) {
+            // বাংলা: legacy 'adminToken' duplicate write সরানো হলো (single-frontend migration) —
+            // adminTokenStore শুধুই 'supreme_admin_jwt' পড়ে; দ্বিতীয় key লেখা অপ্রয়োজনীয় ছিল।
+            // পুরোনো key যদি থেকে থাকে, logout-এ পরিষ্কার হয়ে যাবে।
+            const decoded = decodeJwt(data.token);
+            if (decoded && typeof decoded.role === 'string') {
+              set({ adminRole: decoded.role });
+            }
+          } else {
+            set({ adminError: 'Authentication token missing. Please sign in again.' });
+            return;
+          }
+          
+          eventBus.emit(Events.AUTH_LOGIN, {
+            source: 'admin_store',
+            timestamp: Date.now()
+          });
+          
+          set({ adminAuthenticated: true, otpRequired: false, totpSetupRequired: false, adminOtp: '' });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (verifyErr: any) {
+          const errStr = typeof verifyErr?.message === 'string' ? verifyErr.message : 'Invalid verification code.';
+          set({ adminError: errStr });
+        }
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      const msg = err && typeof err === 'object' && err.message ? String(err.message) : (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      set({ adminError: 'Connection failed: ' + msg });
+    }
+  },
+  handleAdminLogout: async () => {
+    try {
+      const auth = await getFirebaseAuth();
+      // 🔥 ফিক্স: সঠিক টোকেন keyগুলো পরিষ্কার করা হচ্ছে (আগে শুধু 'adminToken' remove হতো,
+      // অথচ adminTokenStore 'supreme_admin_jwt' পড়ে — ফলে স্টেল টোকেন জমে থাকত)
+      // বাংলা (single-frontend migration): 'supremeai_auth_token' এখান থেকে সরানো হলো —
+      // admin logout আর user session ধ্বংস করবে না (আগের ক্রস-সেশন ডিস্ট্রাকশন বাগ)।
+      // User session পরিষ্কার করতে UI logout আলাদাভাবে clearCanonicalSession() ডাকবে।
+      localStorage.removeItem(LEGACY_ADMIN_TOKEN_KEY);
+      // Issue #521: clearAdminToken sweeps sessionStorage + legacy localStorage.
+      clearAdminToken();
+      updateTokenCache(null);
+
+      // বাংলা মন্তব্য: backend-এ কোনো /api/admin/logout endpoint নাই (নিশ্চিত হয়ে দেখা গেছে)।
+      // তাই সুইচ ব্যাকএন্ড অল বেস্ট-এফোর্ট call এড়িয়ে সরাসরি Firebase client signOut করা হলো।
+      // JWT স্ট্যাটেলেস — client-side token মুছে ফেলাই যথেষ্ট।
+      await signOut(auth);
+      
+      eventBus.emit(Events.AUTH_LOGOUT, {
+        source: 'admin_store',
+        timestamp: Date.now()
+      });
+    } catch(e) {
+      console.error('Logout failed:', e);
+    }
+    set({ adminAuthenticated: false, adminRole: null, otpRequired: false, adminOtp: '', adminError: '', totpSetupRequired: false, totpSecret: '', provisioningUri: '' });
+    // Admin logout only clears admin credentials; the user workspace session is independent.
+
+  },
+  resetTotpSetup: async () => {
+    set({ adminError: '' });
+    try {
+      const auth = await getFirebaseAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        set({ adminError: 'Session expired. Please login again.' });
+        return;
+      }
+      const idToken = await user.getIdToken(true);
+      const email = (user.email || '').trim() || get().adminEmail.trim();
+      const data = await authService.firebaseTotpSetup(idToken);
+      set({
+        totpSetupRequired: true,
+        otpRequired: true,
+        totpSecret: data.secret,
+        provisioningUri: data.provisioning_uri || buildProvisioningUri(email, data.secret || ''),
+      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+      const msg = err && typeof err === 'object' && err.message ? String(err.message) : (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      // STATE-LOCK lifecycle: backend 4xx policy messages (e.g. "2FA is already ACTIVE",
+      // "A TOTP enrollment is already pending") are deliberate security responses —
+      // surface them verbatim instead of mislabeling them as connection failures.
+      const isPolicyMessage = err && typeof err === 'object' && err.name === 'ApiError';
+      set({ adminError: isPolicyMessage ? msg : 'Connection failed: ' + msg });
+    }
+  },
+}));

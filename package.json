@@ -1,0 +1,14 @@
+{
+  "name": "supremeai-studio",
+  "version": "2.0.0",
+  "private": true,
+  "description": "SupremeAI Studio — public user-facing React/Vite UI (extracted per roadmap §14 Phase 2)",
+  "scripts": {
+    "dev": "pnpm --filter supremeai-studio-client dev",
+    "build": "pnpm --filter supremeai-studio-client build",
+    "lint": "pnpm --filter supremeai-studio-client lint",
+    "typecheck": "pnpm --filter supremeai-studio-client typecheck",
+    "test": "pnpm --filter supremeai-studio-client test"
+  },
+  "engines": { "node": ">=20" }
+}
