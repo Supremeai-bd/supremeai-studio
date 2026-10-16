@@ -18,11 +18,8 @@ const normalizeBackendUrl = (value: unknown) => {
   if (typeof value !== 'string') return ''
   const normalized = value.trim().replace(/^VITE_[A-Z0-9_]+=\s*/i, '').replace(/\/$/, '')
   try {
-    const urlStr = ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString().replace(/\/$/, '') : ''
-    if (urlStr === 'https://supremeai-primary-node.onrender.com') {
-      return 'https://supremeai-primary-node-5xso.onrender.com'
-    }
-    return urlStr
+    const parsed = new URL(normalized)
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString().replace(/\/$/, '') : ''
   } catch {
     return ''
   }
@@ -33,7 +30,7 @@ const UNIFIED_BACKEND =
   normalizeBackendUrl(process.env.VITE_BACKEND_URL) ||
   normalizeBackendUrl(process.env.VITE_USER_BACKEND) ||
   normalizeBackendUrl(process.env.RENDER_SERVICE_URL) ||
-  'https://supremeai-primary-node-5xso.onrender.com'
+  'https://supremeai-primary-node.onrender.com'
 const USER_BACKEND = UNIFIED_BACKEND
 const ADMIN_BACKEND = normalizeBackendUrl(process.env.VITE_ADMIN_BACKEND) || UNIFIED_BACKEND
 
