@@ -5,7 +5,7 @@ import * as apiUtils from '../utils/api';
 
 vi.mock('../utils/api', () => ({
   fetchWithRetry: vi.fn(),
-  getApiBaseUrl: vi.fn((_path: string) => `https://supremeai-primary-node-5xso.onrender.com`),
+  getApiBaseUrl: vi.fn((_path: string) => `https://supremeai-primary-node.onrender.com`),
 }));
 
 vi.mock('./apiClient', () => ({

@@ -101,11 +101,7 @@ export function normalizeBackendUrl(value: unknown): string {
   try {
     const parsed = new URL(normalized);
     if (!['http:', 'https:'].includes(parsed.protocol)) return '';
-    const urlStr = parsed.toString().replace(/\/$/, '');
-    if (urlStr === 'https://supremeai-primary-node.onrender.com') {
-      return 'https://supremeai-primary-node-5xso.onrender.com';
-    }
-    return urlStr;
+    return parsed.toString().replace(/\/$/, '');
   } catch (err) {
     // অবৈধ URL → খালি স্ট্রিং fallback, তবে কারণটা লগে থাকবে।
     console.warn('[api] backend URL normalization failed, using empty fallback:', err);
