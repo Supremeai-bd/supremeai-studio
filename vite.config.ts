@@ -25,7 +25,12 @@ const normalizeBackendUrl = (value: unknown) => {
   }
 }
 
-const UNIFIED_BACKEND = normalizeBackendUrl(process.env.VITE_API_URL) || normalizeBackendUrl(process.env.VITE_BACKEND_URL) || normalizeBackendUrl(process.env.VITE_USER_BACKEND) || normalizeBackendUrl(process.env.RENDER_SERVICE_URL)
+const UNIFIED_BACKEND =
+  normalizeBackendUrl(process.env.VITE_API_URL) ||
+  normalizeBackendUrl(process.env.VITE_BACKEND_URL) ||
+  normalizeBackendUrl(process.env.VITE_USER_BACKEND) ||
+  normalizeBackendUrl(process.env.RENDER_SERVICE_URL) ||
+  'https://supremeai-primary-node.onrender.com'
 const USER_BACKEND = UNIFIED_BACKEND
 const ADMIN_BACKEND = normalizeBackendUrl(process.env.VITE_ADMIN_BACKEND) || UNIFIED_BACKEND
 

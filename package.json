@@ -79,7 +79,15 @@
     "typescript-eslint": "^8.68.0",
     "vitest": "^3.2.7"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "esbuild",
+      "protobufjs"
+    ]
+  },
+  "packageManager": "pnpm@9.15.4",
   "engines": {
-    "node": "20.x"
+    "node": ">=22"
   }
 }
