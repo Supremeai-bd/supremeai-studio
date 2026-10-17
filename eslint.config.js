@@ -1,5 +1,22 @@
 // For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
-import storybook from "eslint-plugin-storybook";
+let storybookConfig = [];
+try {
+  const storybookModule = await import("eslint-plugin-storybook");
+  const storybook = storybookModule.default || storybookModule;
+  if (storybook?.configs?.["flat/recommended"]) {
+    storybookConfig = [
+      storybook.configs["flat/recommended"],
+      {
+        files: ['**/*.stories.{ts,tsx}'],
+        rules: {
+          'storybook/no-renderer-packages': 'off',
+        },
+      },
+    ];
+  }
+} catch {
+  // storybook plugin optional when not installed in slice
+}
 
 import js from '@eslint/js'
 import globals from 'globals'
@@ -74,11 +91,4 @@ export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 's
   rules: {
     'react-refresh/only-export-components': 'off',
   },
-}, storybook.configs["flat/recommended"], {
-  // বাংলা মন্তব্য: eslint-plugin-storybook v10 framework প্যাকেজ থেকে ইম্পোর্ট চায়, কিন্তু
-  // ইনস্টল করা Storybook 8-এ @storybook/react-vite থেকে Meta/StoryObj এক্সপোর্ট হয় না।
-  files: ['**/*.stories.{ts,tsx}'],
-  rules: {
-    'storybook/no-renderer-packages': 'off',
-  },
-});
+}, ...storybookConfig);
