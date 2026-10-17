@@ -69,6 +69,8 @@ export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 's
     '**/services/apiClient.ts',
     '**/utils/api.ts',
     '**/services/TelemetryTracker.ts',
+    '**/services/CrossAiObserverService.ts',
+    '**/packages/shared-services/**',
     '**/firebase.ts',
     '**/services/mcpViewer.ts',
     '**/services/storageApi.ts',

@@ -44,7 +44,7 @@ export class VscodePrompt implements PlatformPrompt {
       prompt: options.prompt,
       placeHolder: options.placeHolder,
       password: options.password,
-      ignoreFocusOut: true as true,
+      ignoreFocusOut: true as const,
       validateInput:
         options.validateInput &&
         ((value: string) => options.validateInput!(value) ?? undefined),
