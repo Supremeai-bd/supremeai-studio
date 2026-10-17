@@ -66,14 +66,15 @@ export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 's
   //  - storageApi.ts: Cloudflare R2 pre-signed PUT (external storage, backend বাইপাস)
   //  - GlobalErrorBoundary/RouteBoundary: keepalive unload-beacon (queue-তে গেলে unload-এ হারায়)
   files: [
-    'src/services/apiClient.ts',
-    'src/utils/api.ts',
-    'src/firebase.ts',
-    'src/services/mcpViewer.ts',
-    'src/services/storageApi.ts',
-    'src/components/GlobalErrorBoundary.tsx',
-    'src/router/RouteBoundary.tsx',
-    'src/main.tsx',  // keepalive unload-beacon (same justification as GlobalErrorBoundary)
+    '**/services/apiClient.ts',
+    '**/utils/api.ts',
+    '**/services/TelemetryTracker.ts',
+    '**/firebase.ts',
+    '**/services/mcpViewer.ts',
+    '**/services/storageApi.ts',
+    '**/components/GlobalErrorBoundary.tsx',
+    '**/router/RouteBoundary.tsx',
+    '**/main.tsx',
   ],
   rules: {
     'no-restricted-syntax': 'off',
