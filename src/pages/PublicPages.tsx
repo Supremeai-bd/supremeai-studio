@@ -79,7 +79,6 @@ function responseFor(input: string) { const text = input.toLowerCase(); if (text
 async function callLiveAI(prompt: string, modelName: string): Promise<string> {
   try {
     const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL 
-      || (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL
       || 'https://supremeai-api-ulw0.onrender.com';
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 35000);
@@ -92,7 +91,7 @@ async function callLiveAI(prompt: string, modelName: string): Promise<string> {
         'X-Requested-With': 'SupremeAI-Studio',
       },
       body: JSON.stringify({
-        model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
+        model: modelName.toLowerCase().includes('reasoning') ? 'gemini-2.5-pro' : 'auto',
         messages: [{ role: 'user', content: prompt }],
         stream: false,
       }),
@@ -106,6 +105,9 @@ async function callLiveAI(prompt: string, modelName: string): Promise<string> {
       if (content && typeof content === 'string') {
         return content.trim();
       }
+    } else {
+      const errText = await res.text();
+      console.warn('[GuestChat] Gateway responded with non-200:', res.status, errText);
     }
   } catch (err) {
     console.warn('[GuestChat] Live AI fallback triggered:', err);
