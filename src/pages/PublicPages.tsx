@@ -76,6 +76,39 @@ export function PublicLayout({ children }: { children: React.ReactNode }) { retu
 type Message = { role: 'user' | 'assistant'; text: string };
 function responseFor(input: string) { const text = input.toLowerCase(); if (text.includes('plan') || text.includes('build')) return 'I can help turn that idea into a practical plan. Start with the outcome, then add the context and constraints that matter.'; if (text.includes('research')) return 'I can help structure the research, compare the important signals, and turn the findings into a clear next step.'; if (text.includes('file') || text.includes('document')) return 'That is a great use for SupremeAI. Sign in when you want to bring files into the conversation and keep source context attached.'; return 'I can help you think that through. Ask me to plan, explain, summarize, research, or turn an idea into your next action.'; }
 
+async function callLiveAI(prompt: string, modelName: string): Promise<string> {
+  try {
+    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api.onrender.com';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    const res = await fetch(`${apiTarget}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content && typeof content === 'string') {
+        return content.trim();
+      }
+    }
+  } catch (err) {
+    console.warn('[GuestChat] Live AI fallback triggered:', err);
+  }
+  return responseFor(prompt);
+}
+
 function AssistantAvatar({ muted = false }: { muted?: boolean }) { return <span aria-hidden="true" className={`mt-1 flex size-6 shrink-0 items-center justify-center rounded-lg font-mono text-[10px] font-bold text-cyan-300 ${muted ? 'bg-cyan-300/[0.06]' : 'bg-cyan-300/10 shadow-[0_0_16px_rgba(103,232,249,0.15)]'}`}>S</span>; }
 
 function AssistantBubble({ text }: { text: string }) { return <div className="animate-guest-bubble-in flex max-w-[85%] items-start gap-2.5"><AssistantAvatar /><p className="rounded-3xl rounded-tl-md border border-white/[0.06] bg-white/[0.04] px-5 py-3 text-sm leading-6 text-slate-300">{text}</p></div>; }
@@ -89,7 +122,23 @@ export function GuestChatPage() {
   // Issue #1460/#1461: in-page auth prompt state (feature the guest tapped).
   const [authFeature, setAuthFeature] = React.useState<string | null>(null);
   React.useEffect(() => () => { if (typingTimer.current !== null) window.clearTimeout(typingTimer.current); }, []);
-  const submit = (event?: React.FormEvent) => { event?.preventDefault(); const value = input.trim(); if (!value || typing) return; setMessages((current) => [...current, { role: 'user', text: value }]); setInput(''); setTyping(true); typingTimer.current = window.setTimeout(() => { setMessages((current) => [...current, { role: 'assistant', text: responseFor(value) }]); setTyping(false); inputRef.current?.focus(); }, 650); };
+  const submit = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    const value = input.trim();
+    if (!value || typing) return;
+    setMessages((current) => [...current, { role: 'user', text: value }]);
+    setInput('');
+    setTyping(true);
+    try {
+      const reply = await callLiveAI(value, model);
+      setMessages((current) => [...current, { role: 'assistant', text: reply }]);
+    } catch {
+      setMessages((current) => [...current, { role: 'assistant', text: responseFor(value) }]);
+    } finally {
+      setTyping(false);
+      inputRef.current?.focus();
+    }
+  };
   const reset = () => { if (typingTimer.current !== null) window.clearTimeout(typingTimer.current); setTyping(false); setMessages([]); setInput(''); inputRef.current?.focus(); };
   // QA fix (2026-09-14): chips used to hard-replace the composer, so typed text
   // butted straight against the canned prompt ("...findings.What is..."). Now the
