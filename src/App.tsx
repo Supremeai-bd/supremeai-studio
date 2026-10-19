@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
+import { Analytics } from '@vercel/analytics/react';
 // FINAL-TEST FIX: the QueryClientProvider that used to live here was removed —
 // main.tsx already wraps the whole tree in <SharedProviders> (packages/
 // ui-components), so this second provider created a *nested duplicate cache* and
@@ -316,6 +317,7 @@ const AppContent: React.FC = () => {
             </AdminHostEntry>
           </React.Suspense>
       </GlobalConfigInitializer>
+      <Analytics />
     </ErrorBoundary>
   );
 };
