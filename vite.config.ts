@@ -199,6 +199,8 @@ export default defineConfig({
           // — even the guest `/` funnel which never charts. Now: recharts gets
           // its own 'vendor-charts' chunk, loaded only by lazy admin chunks.
           if (/[\\/]node_modules[\\/]recharts[\\/]/.test(id)) return 'vendor-charts'
+          if (/[\\/]node_modules[\\/](@xterm|xterm)[\\/]/.test(id)) return 'vendor-terminal'
+          if (/[\\/]node_modules[\\/](@monaco-editor|monaco-editor)[\\/]/.test(id)) return 'vendor-editor'
           if (/[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/.test(id)) return 'vendor-ui'
           if (/[\\/]node_modules[\\/]@xyflow[\\/]/.test(id)) return 'vendor-flow'
           if (/[\\/]node_modules[\\/]@tanstack[\\/]react-query[\\/]/.test(id)) return 'vendor-query'

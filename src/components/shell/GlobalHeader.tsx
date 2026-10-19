@@ -72,6 +72,7 @@ export function GlobalHeader({ context, onLogout, notifications = [], actions }:
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
+  const isPreview = import.meta.env.VITE_PREVIEW_MODE === 'true';
   const adminAuthorized = canAccessAdminContext();
   const identityLabel = user?.email || (context === 'admin' ? 'operator' : 'user');
   const initials = identityLabel.split('@')[0] || 'SU';
@@ -146,7 +147,7 @@ export function GlobalHeader({ context, onLogout, notifications = [], actions }:
       </button>
 
       {/* Role context pills — navigation only; Admin pill শুধুমাত্র authorized identity-কেই দেখায় */}
-      {adminAuthorized && (
+      {isPreview && adminAuthorized && (
         <div className="hidden md:flex items-center rounded-lg border border-border overflow-hidden text-xs font-semibold" role="navigation" aria-label="Role context">
           <button
             type="button"
@@ -165,7 +166,7 @@ export function GlobalHeader({ context, onLogout, notifications = [], actions }:
         </div>
       )}
 
-      {adminAuthorized && context === 'user' && (
+      {isPreview && adminAuthorized && context === 'user' && (
         <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] font-mono text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
           <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" aria-hidden="true" />
           <span className="hidden sm:inline">Customer Preview Mode</span>
@@ -187,7 +188,7 @@ export function GlobalHeader({ context, onLogout, notifications = [], actions }:
           ? 'CHECKING…'
           : isServerOnline
             ? 'SYSTEM OPERATIONAL'
-            : 'SYSTEM UNAVAILABLE'}
+            : 'DEGRADED'}
       </span>
 
       {actions}

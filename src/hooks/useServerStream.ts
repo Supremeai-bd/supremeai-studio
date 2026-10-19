@@ -34,15 +34,9 @@ export const useServerStream = () => {
         // বাংলা মন্তব্য: 2xx মানে ব্যাকএন্ড জাগ্রত; SSE নিজেই পরে onopen করে অনলাইন সেট করবে।
         setServerStatus(true);
       } catch (e) {
-        // বাংলা: non-ok কিন্তু <500 (যেমন 404) মানে ব্যাকএন্ড রিচেবল — অনলাইন ধরা হয়।
-        // বাকি সব (৫xx বা নেটওয়ার্ক ব্যর্থতা) = ব্যাকএন্ড ডাউন/কোল্ড স্টার্ট → OFFLINE ব্যানার।
-        const status = e && typeof e === 'object' && 'status' in e ? (e as { status?: number }).status : undefined;
-        if (typeof status === 'number' && status < 500) {
-          setServerStatus(true);
-        } else {
-          setServerStatus(false);
-          setStreamStatus('disconnected');
-        }
+        // Honesty contract: health probe failed or returned non-2xx -> backend is offline/degraded.
+        setServerStatus(false);
+        setStreamStatus('disconnected');
       }
     };
 
