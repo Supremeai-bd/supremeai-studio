@@ -78,14 +78,18 @@ function responseFor(input: string) { const text = input.toLowerCase(); if (text
 
 async function callLiveAI(prompt: string, modelName: string): Promise<string> {
   try {
-    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api.onrender.com';
+    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL 
+      || (import.meta as unknown as { env: Record<string, string> }).env?.VITE_API_URL
+      || 'https://supremeai-api-ulw0.onrender.com';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
 
     const res = await fetch(`${apiTarget}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Guest-Mode': 'true',
+        'X-Requested-With': 'SupremeAI-Studio',
       },
       body: JSON.stringify({
         model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
