@@ -216,12 +216,13 @@ export async function cachedFetch<T>(
   }
 }
 
-// বাংলা (#3162): browser-side Redis নেই — batchGet/invalidatePattern no-op
-// return করে (throw নয়)। callers এখন graceful fallback পায়।
-export async function batchGet<T>(keys: string[]): Promise<(T | null)[]> {
-  // বাংলা (#3162): browser Redis intentionally disabled (#2510) —
-  // no-op: return all-nulls instead of throwing. Callers handle null gracefully.
-  return keys.map(() => null);
+// Browser-side Redis is intentionally disabled (#2510). These operations must
+// fail explicitly so callers do not mistake an unavailable cache for a hit.
+const browserCacheError = () =>
+  new Error('[cache.manager] batch cache operations require a backend proxy (#2510).');
+
+export async function batchGet<T>(_keys: string[]): Promise<(T | null)[]> {
+  throw browserCacheError();
 }
 
 // ✅ NEW: Prefetch commonly accessed keys (call on app startup)
@@ -262,13 +263,9 @@ export async function warmCacheFromPatterns(): Promise<void> {
   }
 }
 
-// বাংলা (#3162): browser-side Redis নেই — invalidatePattern no-op।
-// Smart invalidation (only when needed)
-export async function invalidatePattern(pattern: string): Promise<void> {
-  // বাংলা (#3162): browser Redis intentionally disabled (#2510) —
-  // no-op: does not throw, does not claim Redis commands.
-  // When a backend cache proxy is wired, this will proxy the invalidation.
-  void pattern;
+// Smart invalidation belongs behind a backend cache proxy.
+export async function invalidatePattern(_pattern: string): Promise<void> {
+  throw browserCacheError();
 }
 
 // Usage tracking (stay within free tier!)
