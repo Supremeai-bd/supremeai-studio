@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, BrainCircuit, Check, ChevronDown, Clock, Database, Download, FileCode2, FileText, GitBranch, History, Image as ImageIcon, LayoutTemplate, Menu, Paperclip, Plus, Search, Share2, Sparkles, Telescope, Terminal, WandSparkles, Wrench, X, Zap } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
 const publicLinks = [
   { to: '/', label: 'Chat' },
@@ -78,39 +79,23 @@ function responseFor(input: string) { return 'SupremeAI is experiencing high dem
 
 async function callLiveAI(prompt: string, modelName: string): Promise<string> {
   try {
-    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api.onrender.com';
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-
     // Audit fix (bridge-20261019): inject system prompt with today's date.
     // Prev bug: no system message → model returned stale facts as current truth
     // (e.g. claimed Sheikh Hasina was Bangladesh PM after her Aug 2024 resignation).
     const today = new Date().toISOString().split('T')[0];
     const systemPrompt = `You are SupremeAI. Today is ${today}. Your training data has a knowledge cutoff and may not reflect very recent events (elections, resignations, political changes, breaking news). For any time-sensitive factual question, provide what you know but explicitly state your knowledge may be outdated and recommend verifying with a current news source. Never assert outdated information as a current fact without this caveat.`;
 
-    const res = await fetch(`${apiTarget}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        stream: false,
-      }),
-      signal: controller.signal,
+    const data = await apiClient.post<{ choices?: Array<{ message?: { content?: string } }> }>('/v1/chat/completions', {
+      model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      stream: false,
     });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (content && typeof content === 'string') {
-        return content.trim();
-      }
+    const content = data?.choices?.[0]?.message?.content;
+    if (content && typeof content === 'string') {
+      return content.trim();
     }
   } catch (err) {
     console.warn('[GuestChat] Live AI fallback triggered:', err);
