@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, BrainCircuit, Check, ChevronDown, Clock, Database, Download, FileCode2, FileText, GitBranch, History, Image as ImageIcon, LayoutTemplate, Menu, Paperclip, Plus, Search, Share2, Sparkles, Telescope, Terminal, WandSparkles, Wrench, X, Zap } from 'lucide-react';
-import { apiClient } from '../services/apiClient';
 
 const publicLinks = [
   { to: '/', label: 'Chat' },
@@ -79,23 +78,39 @@ function responseFor(input: string) { return 'SupremeAI is experiencing high dem
 
 async function callLiveAI(prompt: string, modelName: string): Promise<string> {
   try {
+    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api.onrender.com';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
     // Audit fix (bridge-20261019): inject system prompt with today's date.
     // Prev bug: no system message → model returned stale facts as current truth
     // (e.g. claimed Sheikh Hasina was Bangladesh PM after her Aug 2024 resignation).
     const today = new Date().toISOString().split('T')[0];
     const systemPrompt = `You are SupremeAI. Today is ${today}. Your training data has a knowledge cutoff and may not reflect very recent events (elections, resignations, political changes, breaking news). For any time-sensitive factual question, provide what you know but explicitly state your knowledge may be outdated and recommend verifying with a current news source. Never assert outdated information as a current fact without this caveat.`;
 
-    const data = await apiClient.post<{ choices?: Array<{ message?: { content?: string } }> }>('/v1/chat/completions', {
-      model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      stream: false,
+    const res = await fetch(`${apiTarget}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelName.toLowerCase().includes('reasoning') ? 'gemini-1.5-pro' : 'auto',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+      }),
+      signal: controller.signal,
     });
-    const content = data?.choices?.[0]?.message?.content;
-    if (content && typeof content === 'string') {
-      return content.trim();
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (content && typeof content === 'string') {
+        return content.trim();
+      }
     }
   } catch (err) {
     console.warn('[GuestChat] Live AI fallback triggered:', err);
@@ -150,19 +165,3 @@ export function GuestChat() {
     </div>
   </section>;
 }
-
-export default function GuestChatPage() {
-  return <PublicLayout><PublicHeader /><main className="px-4 pb-16 pt-24 sm:px-8"><GuestChat /></main></PublicLayout>;
-}
-
-function PublicPage({ title, description }: { title: string; description: string }) {
-  return <PublicLayout><PublicHeader /><main className="mx-auto max-w-4xl px-4 pb-16 pt-32 sm:px-8"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">SupremeAI</p><h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-100">{title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-slate-400">{description}</p></main></PublicLayout>;
-}
-
-export function ModelsPage() { return <PublicPage title="Models for every kind of work" description="Choose a model experience tuned for everyday work, deep reasoning, or fast answers." />; }
-export function PublicInfoPage({ kind = '/about' }: { kind?: string }) { return <PublicPage title={kind === '/contact' ? 'Contact SupremeAI' : 'Built for focused AI work'} description="SupremeAI brings conversations, tools, files, and repeatable workflows into one workspace." />; }
-export function PricingPage() { return <PublicPage title="Simple plans that scale with your work" description="Start with guest access, then unlock higher limits and workspace capabilities when you are ready." />; }
-export function FeaturesPage() { return <PublicPage title="A workspace for ideas that need to move" description="Research, write, analyze, build, and turn useful conversations into repeatable work." />; }
-export function DocsPage() { return <PublicPage title="SupremeAI documentation" description="Learn how to use SupremeAI's workspace, models, tools, and integrations." />; }
-export function AboutPage() { return <PublicPage title="AI that helps work move forward" description="SupremeAI is designed to make powerful AI workflows practical, clear, and accessible." />; }
-
