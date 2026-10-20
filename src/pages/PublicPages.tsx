@@ -165,3 +165,19 @@ export function GuestChat() {
     </div>
   </section>;
 }
+
+export default function GuestChatPage() {
+  return <PublicLayout><PublicHeader /><main className="px-4 pb-16 pt-24 sm:px-8"><GuestChat /></main></PublicLayout>;
+}
+
+function PublicPage({ title, description }: { title: string; description: string }) {
+  return <PublicLayout><PublicHeader /><main className="mx-auto max-w-4xl px-4 pb-16 pt-32 sm:px-8"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">SupremeAI</p><h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-100">{title}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-slate-400">{description}</p></main></PublicLayout>;
+}
+
+export function ModelsPage() { return <PublicPage title="Models for every kind of work" description="Choose a model experience tuned for everyday work, deep reasoning, or fast answers." />; }
+export function PublicInfoPage({ kind = '/about' }: { kind?: string }) { return <PublicPage title={kind === '/contact' ? 'Contact SupremeAI' : 'Built for focused AI work'} description="SupremeAI brings conversations, tools, files, and repeatable workflows into one workspace." />; }
+export function PricingPage() { return <PublicPage title="Simple plans that scale with your work" description="Start with guest access, then unlock higher limits and workspace capabilities when you are ready." />; }
+export function FeaturesPage() { return <PublicPage title="A workspace for ideas that need to move" description="Research, write, analyze, build, and turn useful conversations into repeatable work." />; }
+export function DocsPage() { return <PublicPage title="SupremeAI documentation" description="Learn how to use SupremeAI's workspace, models, tools, and integrations." />; }
+export function AboutPage() { return <PublicPage title="AI that helps work move forward" description="SupremeAI is designed to make powerful AI workflows practical, clear, and accessible." />; }
+
