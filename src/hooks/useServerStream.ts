@@ -34,9 +34,14 @@ export const useServerStream = () => {
         // বাংলা মন্তব্য: 2xx মানে ব্যাকএন্ড জাগ্রত; SSE নিজেই পরে onopen করে অনলাইন সেট করবে।
         setServerStatus(true);
       } catch (e) {
-        // Honesty contract: health probe failed or returned non-2xx -> backend is offline/degraded.
-        setServerStatus(false);
-        setStreamStatus('disconnected');
+        // Audit fix (bridge-20261019): 2xx-only online gate.
+        // Previously: status < 500 (including 404) was treated as "reachable" which
+        // caused a false-positive "SYSTEM OPERATIONAL" banner when /api/v1/health
+        // returned 404. A 404 means the endpoint doesn't exist — backend is degraded.
+        const status = e && typeof e === 'object' && 'status' in e ? (e as { status?: number }).status : undefined;
+        const isOnline = typeof status === 'number' && status >= 200 && status < 300;
+        setServerStatus(isOnline);
+        if (!isOnline) setStreamStatus('disconnected');
       }
     };
 
@@ -105,7 +110,7 @@ export const useServerStream = () => {
 
     connect();
 
-    // বাংলা মন্তব্য: login/logout হলে (একই SPA session-এ, remount ছাড়াই) token
+    // বাংলা মন্তব্য: login/logout হলে (একই SPA session-এ, remount ছাড়াই) token
     // আসে/যায় — সেই মুহূর্তে reactively (re)connect বা disconnect করার জন্য।
     const onAuthChanged = (e: Event) => {
       const hasToken = (e as CustomEvent<{ hasToken: boolean }>).detail?.hasToken;
