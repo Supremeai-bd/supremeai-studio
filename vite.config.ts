@@ -2,11 +2,11 @@ import { defineConfig, loadEnv } from 'vite'
 import fs from 'fs'
 import path from 'path'
 
-// The workspace starts Vite from frontend/, while v0 injects project env vars
-// into the monorepo root. Load that root env explicitly so preview builds and
-// the dev proxy use the configured backend instead of silently falling back to
-// localhost-relative /api requests.
-const projectRoot = path.resolve(process.cwd(), '..')
+// Load env files from the directory Vite is actually running in. Using the
+// parent directory here caused Vercel builds to miss project-level VITE_* vars,
+// silently selecting the fallback backend and making the deployed app slow or
+// unreachable when that service was cold or unavailable.
+const projectRoot = process.cwd()
 Object.assign(process.env, loadEnv(process.env.NODE_ENV || 'development', projectRoot, ''))
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -148,8 +148,8 @@ export default defineConfig({
   server: {
     // 🔧 DYNAMIC SECURITY HEADERS from environment
     headers: {
-      'Cross-Origin-Opener-Policy': process.env.COOP_HEADER || 'same-origin',
-      'Cross-Origin-Embedder-Policy': process.env.COEP_HEADER || 'require-corp',
+      ...(process.env.COOP_HEADER ? { 'Cross-Origin-Opener-Policy': process.env.COOP_HEADER } : {}),
+      ...(process.env.COEP_HEADER ? { 'Cross-Origin-Embedder-Policy': process.env.COEP_HEADER } : {}),
     },
     // বাংলা মন্তব্য: dev proxy — user API → user backend, admin API → admin backend (fallback user)
     proxy: devProxy
@@ -159,8 +159,8 @@ export default defineConfig({
     // it the same cross-origin-isolation headers as the dev server and nginx
     // so the WebContainer sandbox can be validated before shipping.
     headers: {
-      'Cross-Origin-Opener-Policy': process.env.COOP_HEADER || 'same-origin',
-      'Cross-Origin-Embedder-Policy': process.env.COEP_HEADER || 'require-corp',
+      ...(process.env.COOP_HEADER ? { 'Cross-Origin-Opener-Policy': process.env.COOP_HEADER } : {}),
+      ...(process.env.COEP_HEADER ? { 'Cross-Origin-Embedder-Policy': process.env.COEP_HEADER } : {}),
     },
     proxy: devProxy
   },
