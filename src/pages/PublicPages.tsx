@@ -1,8 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, BrainCircuit, Check, ChevronDown, Clock, Database, Download, FileCode2, FileText, GitBranch, History, Image as ImageIcon, LayoutTemplate, Menu, Paperclip, Plus, Search, Share2, Sparkles, Telescope, Terminal, WandSparkles, Wrench, X, Zap } from 'lucide-react';
-import { apiClient } from '../services/apiClient';
-
 
 const publicLinks = [
   { to: '/', label: 'Chat' },
@@ -79,40 +77,57 @@ type Message = { role: 'user' | 'assistant'; text: string };
 function responseFor(input: string) { return 'SupremeAI is experiencing high demand right now, so our servers are busy. Please try again in a moment. Want faster, priority responses and full access to files, tools, and history? Sign in or subscribe to a paid plan for high-priority queue access.'; }
 
 async function callLiveAI(prompt: string, modelName: string, apiKey: string = ''): Promise<{ text: string; via: string }> {
-  try {
+  const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api-ulw0.onrender.com';
+  const resolvedKey = apiKey || (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_KEY || (typeof localStorage !== 'undefined' ? (localStorage.getItem('supremeai_api_key') || 'guest') : 'guest');
+  const modelId = modelName.toLowerCase().includes('reasoning') ? 'supremeai/openrouter' : 'supremeai/groq';
 
-    const resolvedKey = apiKey || (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_KEY || (typeof localStorage !== 'undefined' ? (localStorage.getItem('supremeai_api_key') || 'guest') : 'guest');
+  const today = new Date().toISOString().split('T')[0];
+  const systemPrompt = `You are SupremeAI. Today is ${today}. Your training data has a knowledge cutoff and may not reflect very recent events (elections, resignations, political changes, breaking news). For any time-sensitive factual question, provide what you know but explicitly state your knowledge may be outdated and recommend verifying with a current news source. Never assert outdated information as a current fact without this caveat.`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const res = await fetch(`${apiTarget}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(resolvedKey ? { 'X-SupremeAI-Key': resolvedKey } : {}),
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt },
+          ],
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-    // Audit fix (bridge-20261019): inject system prompt with today's date.
-    // Prev bug: no system message → model returned stale facts as current truth
-    // (e.g. claimed Sheikh Hasina was Bangladesh PM after her Aug 2024 resignation).
-    const today = new Date().toISOString().split('T')[0];
-    const systemPrompt = `You are SupremeAI. Today is ${today}. Your training data has a knowledge cutoff and may not reflect very recent events (elections, resignations, political changes, breaking news). For any time-sensitive factual question, provide what you know but explicitly state your knowledge may be outdated and recommend verifying with a current news source. Never assert outdated information as a current fact without this caveat.`;
-
-    const data = await apiClient.post<{
-      choices?: Array<{ message?: { content?: string } }>;
-      model?: string;
-    }>('/v1/chat/completions', {
-      model: modelName.toLowerCase().includes('reasoning') ? 'supremeai/openrouter' : 'supremeai/groq',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      stream: false,
-    }, {
-      headers: resolvedKey ? { 'X-SupremeAI-Key': resolvedKey } : {},
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (data) {
-      const content = data?.choices?.[0]?.message?.content;
-      const servedModel = (data?.model as string) || '';
-      if (content && typeof content === 'string' && !content.includes('[GEMINI Web Session Active]') && !content.includes('health=100')) {
-        return { text: content.trim(), via: servedModel || 'api' };
+      if (res.ok) {
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content;
+        const servedModel = (data?.model as string) || '';
+        if (content && typeof content === 'string' && !content.includes('[GEMINI Web Session Active]') && !content.includes('health=100') && !content.includes('[GROK Web Session Active]') && !content.includes('[CHATGPT Web Session Active]') && !content.includes('[PERPLEXITY Web Session Active]')) {
+          return { text: content.trim(), via: servedModel || 'api' };
+        }
+      } else if (res.status >= 500 && attempt === 0) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
       }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.warn('[GuestChat] Live AI attempt failed:', err);
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+    }
+  }
+  return { text: responseFor(prompt), via: 'fallback' };
+}
     }
   } catch (err) {
     console.warn('[GuestChat] Live AI fallback triggered:', err);
@@ -139,13 +154,7 @@ export function GuestChat() {
     setMessages((m) => [...m, { role: 'user', text }]);
     setBusy(true);
     try {
-      if (apiKey) {
-        try {
-          localStorage.setItem('supremeai_api_key', apiKey);
-        } catch {
-          // Storage may be unavailable in privacy-restricted browsers.
-        }
-      }
+      if (apiKey) { try { localStorage.setItem('supremeai_api_key', apiKey); } catch {} }
       const reply = await callLiveAI(text, model, apiKey);
       setMessages((m) => [...m, { role: 'assistant', text: reply.text, via: reply.via }]);
     } catch {
