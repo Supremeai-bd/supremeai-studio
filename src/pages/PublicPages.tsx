@@ -1,6 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, BrainCircuit, Check, ChevronDown, Clock, Database, Download, FileCode2, FileText, GitBranch, History, Image as ImageIcon, LayoutTemplate, Menu, Paperclip, Plus, Search, Share2, Sparkles, Telescope, Terminal, WandSparkles, Wrench, X, Zap } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
+
 
 const publicLinks = [
   { to: '/', label: 'Chat' },
@@ -78,7 +80,7 @@ function responseFor(input: string) { return 'SupremeAI is experiencing high dem
 
 async function callLiveAI(prompt: string, modelName: string, apiKey: string = ''): Promise<{ text: string; via: string }> {
   try {
-    const apiTarget = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_URL || 'https://supremeai-api-ulw0.onrender.com';
+
     const resolvedKey = apiKey || (import.meta as unknown as { env: Record<string, string> }).env?.VITE_SUPREMEAI_API_KEY || (typeof localStorage !== 'undefined' ? (localStorage.getItem('supremeai_api_key') || 'guest') : 'guest');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
@@ -89,26 +91,23 @@ async function callLiveAI(prompt: string, modelName: string, apiKey: string = ''
     const today = new Date().toISOString().split('T')[0];
     const systemPrompt = `You are SupremeAI. Today is ${today}. Your training data has a knowledge cutoff and may not reflect very recent events (elections, resignations, political changes, breaking news). For any time-sensitive factual question, provide what you know but explicitly state your knowledge may be outdated and recommend verifying with a current news source. Never assert outdated information as a current fact without this caveat.`;
 
-    const res = await fetch(`${apiTarget}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(resolvedKey ? { 'X-SupremeAI-Key': resolvedKey } : {}),
-      },
-      body: JSON.stringify({
-        model: modelName.toLowerCase().includes('reasoning') ? 'supremeai/openrouter' : 'supremeai/groq',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-        stream: false,
-      }),
+    const data = await apiClient.post<{
+      choices?: Array<{ message?: { content?: string } }>;
+      model?: string;
+    }>('/v1/chat/completions', {
+      model: modelName.toLowerCase().includes('reasoning') ? 'supremeai/openrouter' : 'supremeai/groq',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      stream: false,
+    }, {
+      headers: resolvedKey ? { 'X-SupremeAI-Key': resolvedKey } : {},
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
 
-    if (res.ok) {
-      const data = await res.json();
+    if (data) {
       const content = data?.choices?.[0]?.message?.content;
       const servedModel = (data?.model as string) || '';
       if (content && typeof content === 'string' && !content.includes('[GEMINI Web Session Active]') && !content.includes('health=100')) {
@@ -140,7 +139,13 @@ export function GuestChat() {
     setMessages((m) => [...m, { role: 'user', text }]);
     setBusy(true);
     try {
-      if (apiKey) { try { localStorage.setItem('supremeai_api_key', apiKey); } catch {} }
+      if (apiKey) {
+        try {
+          localStorage.setItem('supremeai_api_key', apiKey);
+        } catch {
+          // Storage may be unavailable in privacy-restricted browsers.
+        }
+      }
       const reply = await callLiveAI(text, model, apiKey);
       setMessages((m) => [...m, { role: 'assistant', text: reply.text, via: reply.via }]);
     } catch {
