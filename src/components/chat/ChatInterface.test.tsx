@@ -127,4 +127,25 @@ describe('ChatInterface Tier-S wiring contract (M10)', () => {
     await userEvent.click(screen.getByTitle('Toggle artifacts panel'));
     expect(screen.queryByTestId('artifacts-panel-container')).toBeNull();
   });
+
+  it('renders quick action chips and pre-fills composer on click', async () => {
+    render(<ChatInterface />);
+    const chips = screen.getByTestId('chat-chips');
+    expect(chips).toBeInTheDocument();
+    expect(screen.getByText('Audit my project')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Audit my project'));
+    const input = screen.getByPlaceholderText(/type your message to the ai agent/i) as HTMLTextAreaElement;
+    expect(input.value).toBe('Audit my project');
+  });
+
+  it('toggles UI language when clicking the language toggle', async () => {
+    render(<ChatInterface />);
+    const langBtn = screen.getByTestId('lang-toggle');
+    expect(langBtn).toHaveTextContent('EN');
+
+    await userEvent.click(langBtn);
+    expect(langBtn).toHaveTextContent('বাং');
+    expect(screen.getByPlaceholderText(/এআই এজেন্টকে আপনার মেসেজ লিখুন/i)).toBeInTheDocument();
+  });
 });

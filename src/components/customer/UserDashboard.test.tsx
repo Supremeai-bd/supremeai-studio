@@ -68,6 +68,20 @@ describe('UserDashboard', () => {
     expect(mockedUseNavigate).not.toHaveBeenCalled();
   });
 
+  it('renders quick-action chips and navigates with intent param on click', () => {
+    renderWithProviders(<UserDashboard />);
+    const chipsContainer = screen.getByTestId('intent-chips');
+    expect(chipsContainer).toBeInTheDocument();
+    const firstChip = chipsContainer.querySelector('button');
+    expect(firstChip).not.toBeNull();
+    if (firstChip) {
+      fireEvent.click(firstChip);
+      expect(mockedUseNavigate).toHaveBeenCalledWith(
+        expect.stringContaining('/workspace/live?intent=')
+      );
+    }
+  });
+
   it('renders the main workspace sections and actions', () => {
     renderWithProviders(<UserDashboard />);
     expect(screen.getByText('Recent work')).toBeInTheDocument();

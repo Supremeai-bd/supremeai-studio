@@ -45,9 +45,10 @@ export const UserDashboard: React.FC = () => {
   const [ask, setAsk] = useState('');
   const { enabledModules, toggleModule } = useWorkspaceSettings();
   const name = user?.name?.split(' ')[0] || 'there';
+  const isCosmic = import.meta.env.VITE_COSMIC_DASHBOARD !== 'false';
 
-  const submitAsk = () => {
-    const intent = ask.trim();
+  const submitAsk = (explicitIntent?: string) => {
+    const intent = (explicitIntent ?? ask).trim();
     if (!intent) return;
     navigate(`/workspace/live?intent=${encodeURIComponent(intent)}`);
   };
@@ -60,6 +61,16 @@ export const UserDashboard: React.FC = () => {
   // Recent work panel state: null = still loading, [] = honestly empty
   const [recentConversations, setRecentConversations] = useState<RecentConversation[] | null>(null);
   const [recentLoading, setRecentLoading] = useState(false);
+
+  const dynamicChips = (recentConversations && recentConversations.length > 0)
+    ? recentConversations.slice(0, 3).map((c) => ({
+        label: c.title?.trim() || 'Continue discussion',
+        intent: c.title?.trim() || 'Continue discussion',
+      }))
+    : quickStarts.slice(0, 3).map((q) => ({
+        label: q.label,
+        intent: q.label,
+      }));
 
   const fetchWorkspaceState = async () => {
     setLoadingWorkspace(true);
@@ -149,7 +160,14 @@ export const UserDashboard: React.FC = () => {
 
         <TaskAutomationCard />
 
-        <section className="sa-surface-raised p-5 sm:p-7" aria-labelledby="intent-heading">
+        <section
+          className={`sa-surface-raised p-5 sm:p-7 relative overflow-hidden ${
+            isCosmic
+              ? 'before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_at_top,rgba(168,85,247,0.12),transparent_70%)] before:pointer-events-none'
+              : ''
+          }`}
+          aria-labelledby="intent-heading"
+        >
           <p className="sa-eyebrow mb-2">Start anywhere</p>
           <h2 id="intent-heading" className="text-xl font-semibold">
             What would you like to do?
@@ -170,18 +188,32 @@ export const UserDashboard: React.FC = () => {
             <button
               type="button"
               aria-label="Open SupremeAI Studio"
-              onClick={submitAsk}
+              onClick={() => submitAsk()}
               className="flex size-11 shrink-0 items-center justify-center rounded-[var(--sa-radius-sm)] bg-[var(--sa-primary)] text-white transition hover:opacity-90"
             >
               <ArrowRight size={17} />
             </button>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          {/* WO3: Dynamic quick-action chips */}
+          <div className="mt-4 flex flex-wrap gap-2" data-testid="intent-chips">
+            {dynamicChips.map(({ label, intent }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => submitAsk(intent)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[var(--sa-border)] px-3 py-1.5 text-xs text-[var(--sa-ink-muted)] transition duration-200 hover:border-[var(--aurora-purple)] hover:bg-[var(--sa-primary-soft)] hover:text-[var(--sa-ink)] hover:shadow-[var(--glow-accent)] focus-visible:ring-2 focus-visible:ring-[var(--aurora-purple)]"
+              >
+                <Sparkles size={12} className="text-[var(--aurora-purple)]" />
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
             {quickStarts.map(({ label, icon: Icon, href }) => (
               <Link
                 key={label}
                 to={href}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--sa-border)] px-3 py-2 text-xs text-[var(--sa-ink-muted)] transition hover:border-[var(--sa-primary)] hover:bg-[var(--sa-primary-soft)] hover:text-[var(--sa-primary)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--sa-border)] px-3 py-2 text-xs text-[var(--sa-ink-muted)] transition duration-200 hover:border-[var(--sa-primary)] hover:bg-[var(--sa-primary-soft)] hover:text-[var(--sa-primary)] hover:-translate-y-0.5"
               >
                 <Icon size={13} />
                 {label}
@@ -272,7 +304,16 @@ export const UserDashboard: React.FC = () => {
               <p className="sa-eyebrow">Recent work</p>
               {recentLoading && <RefreshCw size={13} className="animate-spin text-[var(--sa-ink-muted)]" />}
             </div>
-            {recentConversations && recentConversations.length > 0 ? (
+            {recentLoading ? (
+              <div className="mt-3 flex flex-col gap-2" data-testid="recent-skeleton">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-10 w-full animate-pulse rounded-[var(--sa-radius-sm)] border border-[var(--sa-border)] bg-[var(--sa-border)]/40"
+                  />
+                ))}
+              </div>
+            ) : recentConversations && recentConversations.length > 0 ? (
               <>
                 <h2 className="mt-2 text-lg font-semibold">Pick up where you left off</h2>
                 <ul className="mt-3 flex flex-col gap-2">
@@ -332,7 +373,7 @@ export const UserDashboard: React.FC = () => {
 
       {showTools && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 p-4 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--sa-overlay)] p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="tools-dialog-title"
