@@ -87,19 +87,13 @@ export const GlobalConfigInitializer: React.FC<GlobalConfigInitializerProps> = (
       }
     };
 
-    // বাংলা মন্তব্য: রিয়েল কনফিগ ব্যাকগ্রাউন্ডে আনবে (non-blocking) — UI আটকাবে না
-    fetchConfig();
-    // বাংলা মন্তব্য: ব্যাকএন্ড থেকে ক্যানোনিক্যাল ব্র্যান্ডিং ম্যাপ ফেচ করে লোকাল কপি ওভাররাইড করবে (single source) — non-blocking
-    void loadSupremeBranding();
+    // বাংলা মন্তব্য: Zero-Wait Instant Boot — মাউন্টের সাথে সাথেই AppDefaults প্রয়োগ করে UI আনব্লক করি (0ms delay)।
+    // এর ফলে ব্যাকএন্ড স্লিপিং/কোল্ড-স্টার্টে থাকলেও কোনো দীর্ঘ লোডিং স্পিনার বা Preparing your workspace দেখাবে না।
+    applyConfig(AppDefaults);
 
-        // বাংলা মন্তব্য: ৮ সেকেন্ড ডেডলাইন — রিয়েল কনফিগ না এলে সাথে সাথে AppDefaults apply করে UI আনব্লক করব
-        deadlineTimer = setTimeout(() => {
-          if (cancelled) return;
-          if (!useStore.getState().isConfigLoaded) {
-            console.warn(`[Config] Deadline ${CONFIG_DEADLINE_MS}ms exceeded. Falling back to safe defaults.`);
-            applyConfig(AppDefaults);
-          }
-        }, CONFIG_DEADLINE_MS);
+    // ব্যাকগ্রাউন্ডে রিয়েল কনফিগ রিড করে স্টেট এনরিচ করি (সম্পূর্ণ Non-blocking)
+    fetchConfig();
+    void loadSupremeBranding();
 
     if (typeof window !== 'undefined') {
       window.addEventListener('online', onDeviceOnline);

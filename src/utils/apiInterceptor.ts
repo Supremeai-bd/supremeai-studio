@@ -79,27 +79,19 @@ export function setupGlobalFetchInterceptor() {
           url.includes('/api/config') ||
           url.includes('/api/health')
         );
+        const isGuestOrChat = typeof url === 'string' && (url.includes('/chat/completions') || url.includes('/v1/'));
         const win = window as unknown as { showGlobalToast?: (type: string, msg: string) => void };
-        if (win.showGlobalToast && !isBackgroundRequest) {
+        if (win.showGlobalToast && !isBackgroundRequest && !isGuestOrChat) {
           win.showGlobalToast('error', errorMsg);
         }
       }
 
       return response;
     } catch (error) {
-      const win = window as unknown as { showGlobalToast?: (type: string, msg: string) => void };
-      // বাংলা মন্তব্য: AbortError (timeout বা signal abort) হলে raw মেসেজ ("signal is aborted without reason")
-      // ইউজারকে না দেখিয়ে নীরবে caller-কে throw করব; GlobalConfigInitializer নিজেই fallback দেখাবে।
-      const isAbort = error instanceof Error &&
-        (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('aborted without reason'));
-      const isBackgroundRequest = typeof url === 'string' && (
-        url.includes('/api/health-aggregation') ||
-        url.includes('/api/config') ||
-        url.includes('/api/health')
-      );
-      if (!isAbort && win.showGlobalToast && !isBackgroundRequest) {
-        win.showGlobalToast('error', 'Unable to connect. Please check your connection and retry.');
-      }
+      // বাংলা মন্তব্য: নেটওয়ার্ক বা কানেকশন ফেইলিয়রে ইউজারের স্ক্রিনে "Unable to connect" গ্লোবাল টোস্ট দেখানো
+      // ইউজার এক্সপেরিয়েন্স নষ্ট করে। কলার ফাংশনগুলো (GlobalConfigInitializer, GuestChat ইত্যাদি) নিজেরাই
+      // নিজস্ব গ্রেসফুল ফলব্যাক বা রিট্রাই হ্যান্ডেল করে। তাই এখানে গ্লোবাল পপআপ বন্ধ করে নীরবে লগ রাখা হলো।
+      console.warn('⚠️ [API_INTERCEPTOR_FETCH_ERROR]:', error instanceof Error ? error.message : error);
       throw error;
     }
   };

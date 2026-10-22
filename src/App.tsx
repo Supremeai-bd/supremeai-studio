@@ -81,15 +81,15 @@ import { RouteBoundary } from './router/RouteBoundary';
 // the user-facing app. Transparent pass-through on every other host.
 import { AdminHostEntry } from './router/AdminHostEntry';
 
-// বাংলা মন্তব্য (Wave 3): বাকি ১০টি eager page import-ও React.lazy করা হলো —
-// ২৬টি lazy page-এর মতোই একই top-level Suspense-এর নিচে চলে, main chunk ছোট থাকে।
-const GuestChatPage = React.lazy(() => import("./pages/PublicPages"));
-const ModelsPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.ModelsPage })));
-const PublicInfoPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.PublicInfoPage })));
-const PricingPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.PricingPage })));
-const FeaturesPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.FeaturesPage })));
-const DocsPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.DocsPage })));
-const AboutPage = React.lazy(() => import("./pages/PublicPages").then(m => ({ default: m.AboutPage })));
+// Eagerly import lightweight PublicPages (~7KB) so public visitors load instantly without a 2nd round-trip chunk fetch
+import GuestChatPage, {
+  ModelsPage,
+  PublicInfoPage,
+  PricingPage,
+  FeaturesPage,
+  DocsPage,
+  AboutPage,
+} from "./pages/PublicPages";
 const RunsPage = React.lazy(() => import("./pages/RunsPage"));
 const MarketplacePage = React.lazy(() => import("./pages/MarketplacePage"));
 const ActivityPage = React.lazy(() => import("./pages/ActivityPage"));
