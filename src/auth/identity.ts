@@ -5,8 +5,7 @@
 // এগুলো শুধু UX/guard decision — প্রতিটি privileged API call আবার backend-এ
 // authorize হয়। URL বা localStorage role key কখনোই এখানে ব্যবহৃত হয় না।
 
-import { useAuthStore } from '../store/authStore';
-import { normalizeRole, type Role } from '../config/permissions';
+import { normalizeRole, type Role } from '../types';
 
 /** Storage key of the server-signed admin JWT issued after OTP/TOTP step-up. */
 export const ADMIN_JWT_KEY = 'supreme_admin_jwt';
@@ -25,7 +24,9 @@ interface AdminJwtClaims {
 export function readAdminJwtClaims(): AdminJwtClaims | null {
   if (typeof window === 'undefined') return null;
   try {
-    const token = sessionStorage.getItem(ADMIN_JWT_KEY) || localStorage.getItem(ADMIN_JWT_KEY);
+    // Issue #521 (FE-04): sessionStorage only — the localStorage duplicate write/read
+    // (which survived browser restarts) is gone; legacy entries are swept.
+    const token = sessionStorage.getItem(ADMIN_JWT_KEY);
     if (!token) return null;
     const part = token.split('.')[1];
     if (!part) return null;
@@ -56,23 +57,10 @@ export function getAdminJwtRole(): Role | null {
 }
 
 /**
- * Canonical role of the current identity:
- * backend-verified authStore role wins; the admin JWT claim (also
- * server-issued) fills the gap when the user session has no role data.
- */
-export function getCanonicalRole(): Role | null {
-  const storeRole = useAuthStore.getState().role;
-  if (storeRole) return storeRole;
-  return getAdminJwtRole();
-}
-
-/**
  * Is this identity authorized for the Admin context at all?
- * (Route-level UX gate. Step-up enforcement still lives in AdminShell —
- * refresh always re-demands OTP/TOTP, by design.)
  */
 export function canAccessAdminContext(): boolean {
-  return getAdminJwtRole() === 'admin' || useAuthStore.getState().role === 'admin';
+  return getAdminJwtRole() === 'admin';
 }
 
 /**

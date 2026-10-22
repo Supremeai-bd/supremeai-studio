@@ -14,7 +14,6 @@ const decodeJwt = (token: string): Record<string, unknown> | null => {
     }).join(''));
     const decoded = JSON.parse(jsonPayload);
 
-    // Validate decoded structure
     if (!decoded || typeof decoded !== 'object') {
       throw new Error('Decoded JWT payload is not a valid object');
     }
@@ -22,7 +21,6 @@ const decodeJwt = (token: string): Record<string, unknown> | null => {
     return decoded;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
-    // 🛡️ অডিটর ফিক্স: সাইলেন্ট ফেইলর ব্লাস্ট করে ইন্টারনাল ডায়াগনস্টিক ট্রেস এনফোর্স (টোকেন লিক প্রতিরোধ)
     console.warn("⚠️ [JWT_DECODE_ERROR]: Failed to safely parse admin JWT token.", {
       error_message: e?.message || 'Malformed JWT structure',
       timestamp: new Date().toISOString(),
@@ -31,15 +29,11 @@ const decodeJwt = (token: string): Record<string, unknown> | null => {
   }
 };
 
-// বাংলা মন্তব্য: ব্যাকএন্ড provisioning_uri না দিলে ক্লায়েন্ট-সাইডে otpauth URI তৈরি করে QR দেখানো হয়।
 const buildProvisioningUri = (email: string, secret: string): string =>
   `otpauth://totp/SupremeAI:${encodeURIComponent(email)}?secret=${secret}&issuer=SupremeAI&digits=6&period=30`;
 
 const persistAdminToken = (token: unknown): token is string => {
   if (typeof token !== 'string' || token.trim().length < 20) return false;
-  // Issue #521 (FE-04): sessionStorage only — the localStorage duplicate write
-  // (which survived browser restarts) is gone; legacy entries are swept by
-  // tokenStorage's read path and by handleAdminLogout/clearAuthToken.
   setAdminToken(token);
   updateTokenCache(token);
   return true;
@@ -81,8 +75,6 @@ interface AdminState {
 const getInitialAdminToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   try {
-    // Issue #521: tokenStorage read — sessionStorage first, legacy localStorage
-    // entries are migrated (and removed) on first read.
     return getAdminToken();
   } catch (err) {
     console.warn('[adminStore] initial admin token read failed, using fallback:', err);
@@ -141,8 +133,6 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     set({ adminError: '' });
 
     try {
-      let idToken = '';
-
       if (!otpRequired) {
         // Step 1+2: Native backend login (no Firebase)
         const data = await authService.adminLogin(cleanEmail, cleanPassword);
@@ -157,15 +147,14 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         if (data.status === 'otp_required') {
           set({ otpRequired: true });
         } else if (data.status === 'totp_setup_required') {
-          // Initiate TOTP Setup
           try {
             const setupData = await authService.adminTotpSetup();
             set({
               totpSetupRequired: true,
               otpRequired: true,
-      totpSecret: setupData.secret,
-      recoveryCodes: setupData.recovery_codes || [],
-      provisioningUri: setupData.provisioning_uri || buildProvisioningUri(cleanEmail, setupData.secret || '')
+              totpSecret: setupData.secret,
+              recoveryCodes: setupData.recovery_codes || [],
+              provisioningUri: setupData.provisioning_uri || buildProvisioningUri(cleanEmail, setupData.secret || '')
             });
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } catch (setupErr: any) {
@@ -188,9 +177,6 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         try {
           const data = await authService.adminTotpVerify(adminOtp.trim(), rememberBrowser);
           if (persistAdminToken(data.token)) {
-            // বাংলা: legacy 'adminToken' duplicate write সরানো হলো (single-frontend migration) —
-            // adminTokenStore শুধুই 'supreme_admin_jwt' পড়ে; দ্বিতীয় key লেখা অপ্রয়োজনীয় ছিল।
-            // পুরোনো key যদি থেকে থাকে, logout-এ পরিষ্কার হয়ে যাবে।
             const decoded = decodeJwt(data.token);
             if (decoded && typeof decoded.role === 'string') {
               set({ adminRole: decoded.role });
@@ -221,21 +207,10 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   handleAdminLogout: async () => {
     try {
       await authService.adminLogout();
-      // 🔥 ফিক্স: সঠিক টোকেন keyগুলো পরিষ্কার করা হচ্ছে (আগে শুধু 'adminToken' remove হতো,
-      // অথচ adminTokenStore 'supreme_admin_jwt' পড়ে — ফলে স্টেল টোকেন জমে থাকত)
-      // বাংলা (single-frontend migration): 'supremeai_auth_token' এখান থেকে সরানো হলো —
-      // admin logout আর user session ধ্বংস করবে না (আগের ক্রস-সেশন ডিস্ট্রাকশন বাগ)।
-      // User session পরিষ্কার করতে UI logout আলাদাভাবে clearCanonicalSession() ডাকবে।
       localStorage.removeItem(LEGACY_ADMIN_TOKEN_KEY);
-      // Issue #521: clearAdminToken sweeps sessionStorage + legacy localStorage.
       clearAdminToken();
       updateTokenCache(null);
 
-      // বাংলা মন্তব্য: backend-এ কোনো /api/admin/logout endpoint নাই (নিশ্চিত হয়ে দেখা গেছে)।
-      // JWT stateless — client-side token cleared above.
-      // JWT স্ট্যাটেলেস — client-side token মুছে ফেলাই যথেষ্ট।
-      // JWT stateless — client-side token cleared above.
-      
       eventBus.emit(Events.AUTH_LOGOUT, {
         source: 'admin_store',
         timestamp: Date.now()
@@ -244,8 +219,6 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       console.error('Logout failed:', e);
     }
     set({ adminAuthenticated: false, adminRole: null, otpRequired: false, adminOtp: '', adminError: '', totpSetupRequired: false, totpSecret: '', provisioningUri: '' });
-    // Admin logout only clears admin credentials; the user workspace session is independent.
-
   },
   resetTotpSetup: async () => {
     set({ adminError: 'TOTP reset not available in native auth mode.' });
