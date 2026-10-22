@@ -1,4 +1,3 @@
-export { useAuth } from './useAuth';
 export { useWebSocket } from './useWebSocket';
 export { useTranslation } from './useTranslation';
 export { useErrorHandler } from './useErrorHandler';

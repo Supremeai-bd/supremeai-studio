@@ -1,11 +1,9 @@
 import { create } from 'zustand';
-import { getFirebaseAuth } from '../firebase';
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { eventBus, Events } from '../lib/componentEventBus';
 import { authService } from '../services/authService';
 import { updateTokenCache } from '../services/apiClient';
 import { clearAdminToken, getAdminToken, setAdminToken } from '../services/tokenStorage';
 import { LEGACY_ADMIN_TOKEN_KEY } from './authStore';
+import { eventBus, Events } from '../lib/componentEventBus';
 
 const decodeJwt = (token: string): Record<string, unknown> | null => {
   try {
@@ -132,16 +130,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   recoveryCode: '',
   setRecoveryCode: (val) => set({ recoveryCode: val }),
   recoverTotp: async () => {
-    set({ adminError: '' });
-    try {
-      const auth = await getFirebaseAuth();
-      const user = auth.currentUser;
-      if (!user) throw new Error('Session expired. Please login again.');
-      const data = await authService.firebaseTotpRecover(await user.getIdToken(true), get().recoveryCode);
-      set({ totpSetupRequired: true, otpRequired: true, totpSecret: data.secret, provisioningUri: data.provisioning_uri, recoveryCode: '' });
-    } catch (err) {
-      set({ adminError: err instanceof Error ? err.message : 'Recovery failed.' });
-    }
+    set({ adminError: 'TOTP recovery not available in native auth mode.' });
   },
   handleAdminLogin: async (password?: string) => {
     const { adminEmail, otpRequired, adminOtp, rememberBrowser } = get();
@@ -152,29 +141,11 @@ export const useAdminStore = create<AdminState>((set, get) => ({
     set({ adminError: '' });
 
     try {
-
-      // বাংলা মন্তব্য: getFirebaseAuth() ব্যবহার করা হচ্ছে যাতে Firebase app ইনিশিয়ালাইজেশন (initializeApp) সঠিকভাবে সম্পন্ন হয়
-      const auth = await getFirebaseAuth();
-
       let idToken = '';
 
       if (!otpRequired) {
-        // Step 1: Firebase Email/Password Authentication
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-          idToken = await userCredential.user.getIdToken(true);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (authErr: any) {
-          console.error("Firebase Auth Error:", authErr);
-          const firebaseErrMsg = typeof authErr?.message === 'string' 
-            ? authErr.message 
-            : (authErr?.code ? `Auth error: ${authErr.code}` : (authErr && typeof authErr === 'object' ? JSON.stringify(authErr) : 'Invalid email or password.'));
-          set({ adminError: String(firebaseErrMsg) });
-          return;
-        }
-
-        // Step 2: Send Firebase Token to Backend for Role/TOTP check
-        const data = await authService.firebaseLogin(idToken);
+        // Step 1+2: Native backend login (no Firebase)
+        const data = await authService.adminLogin(cleanEmail, cleanPassword);
 
         if (data.status === 'trusted_browser' && persistAdminToken(data.token)) {
           const decoded = decodeJwt(data.token);
@@ -188,7 +159,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         } else if (data.status === 'totp_setup_required') {
           // Initiate TOTP Setup
           try {
-            const setupData = await authService.firebaseTotpSetup(idToken);
+            const setupData = await authService.adminTotpSetup();
             set({
               totpSetupRequired: true,
               otpRequired: true,
@@ -213,18 +184,9 @@ export const useAdminStore = create<AdminState>((set, get) => ({
           set({ adminError: 'Not authorized as admin.' });
         }
       } else {
-        // Step 3: Verify TOTP
-        // We need the ID token again. Since the user just logged in, they are in auth.currentUser
-        const user = auth.currentUser;
-        if (!user) {
-          set({ adminError: 'Session expired. Please login again.' });
-          set({ otpRequired: false });
-          return;
-        }
-        idToken = await user.getIdToken();
-
+        // Step 3: Verify TOTP (native)
         try {
-          const data = await authService.firebaseTotpVerify(idToken, adminOtp.trim(), rememberBrowser);
+          const data = await authService.adminTotpVerify(adminOtp.trim(), rememberBrowser);
           if (persistAdminToken(data.token)) {
             // বাংলা: legacy 'adminToken' duplicate write সরানো হলো (single-frontend migration) —
             // adminTokenStore শুধুই 'supreme_admin_jwt' পড়ে; দ্বিতীয় key লেখা অপ্রয়োজনীয় ছিল।
@@ -258,7 +220,7 @@ export const useAdminStore = create<AdminState>((set, get) => ({
   },
   handleAdminLogout: async () => {
     try {
-      const auth = await getFirebaseAuth();
+      await authService.adminLogout();
       // 🔥 ফিক্স: সঠিক টোকেন keyগুলো পরিষ্কার করা হচ্ছে (আগে শুধু 'adminToken' remove হতো,
       // অথচ adminTokenStore 'supreme_admin_jwt' পড়ে — ফলে স্টেল টোকেন জমে থাকত)
       // বাংলা (single-frontend migration): 'supremeai_auth_token' এখান থেকে সরানো হলো —
@@ -270,9 +232,9 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       updateTokenCache(null);
 
       // বাংলা মন্তব্য: backend-এ কোনো /api/admin/logout endpoint নাই (নিশ্চিত হয়ে দেখা গেছে)।
-      // তাই সুইচ ব্যাকএন্ড অল বেস্ট-এফোর্ট call এড়িয়ে সরাসরি Firebase client signOut করা হলো।
+      // JWT stateless — client-side token cleared above.
       // JWT স্ট্যাটেলেস — client-side token মুছে ফেলাই যথেষ্ট।
-      await signOut(auth);
+      // JWT stateless — client-side token cleared above.
       
       eventBus.emit(Events.AUTH_LOGOUT, {
         source: 'admin_store',
@@ -286,31 +248,6 @@ export const useAdminStore = create<AdminState>((set, get) => ({
 
   },
   resetTotpSetup: async () => {
-    set({ adminError: '' });
-    try {
-      const auth = await getFirebaseAuth();
-      const user = auth.currentUser;
-      if (!user) {
-        set({ adminError: 'Session expired. Please login again.' });
-        return;
-      }
-      const idToken = await user.getIdToken(true);
-      const email = (user.email || '').trim() || get().adminEmail.trim();
-      const data = await authService.firebaseTotpSetup(idToken);
-      set({
-        totpSetupRequired: true,
-        otpRequired: true,
-        totpSecret: data.secret,
-        provisioningUri: data.provisioning_uri || buildProvisioningUri(email, data.secret || ''),
-      });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      const msg = err && typeof err === 'object' && err.message ? String(err.message) : (typeof err === 'object' ? JSON.stringify(err) : String(err));
-      // STATE-LOCK lifecycle: backend 4xx policy messages (e.g. "2FA is already ACTIVE",
-      // "A TOTP enrollment is already pending") are deliberate security responses —
-      // surface them verbatim instead of mislabeling them as connection failures.
-      const isPolicyMessage = err && typeof err === 'object' && err.name === 'ApiError';
-      set({ adminError: isPolicyMessage ? msg : 'Connection failed: ' + msg });
-    }
+    set({ adminError: 'TOTP reset not available in native auth mode.' });
   },
 }));

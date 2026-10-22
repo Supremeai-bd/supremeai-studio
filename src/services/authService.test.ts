@@ -9,56 +9,59 @@ vi.mock('./apiClient', () => ({
 import { authService } from './authService';
 import { apiClient } from './apiClient';
 
-describe('authService', () => {
+describe('authService (Native / Zero-Firebase)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('firebaseLogin posts the id_token', async () => {
+  it('adminLogin posts email and password', async () => {
     (apiClient.post as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       status: 'ok',
-      token: 't',
-      uid: 'u',
-      email: 'e',
+      token: 'admin-jwt-token',
+      uid: 'admin-1',
+      email: 'admin@supremeai.com',
     });
-    const res = await authService.firebaseLogin('idt');
-    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/firebase-login', {
-      id_token: 'idt',
+    const res = await authService.adminLogin('admin@supremeai.com', 'secret');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/login', {
+      email: 'admin@supremeai.com',
+      password: 'secret',
     });
-    expect(res.token).toBe('t');
+    expect(res.token).toBe('admin-jwt-token');
   });
 
-  it('firebaseTotpSetup posts the id_token', async () => {
+  it('adminTotpSetup posts to /api/admin/totp-setup', async () => {
     (apiClient.post as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      secret: 's',
-      provisioning_uri: 'uri',
+      secret: 's3cr3t',
+      provisioning_uri: 'otpauth://...',
+      recovery_codes: ['code1'],
     });
-    const res = await authService.firebaseTotpSetup('idt');
-    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/firebase-totp-setup', {
-      id_token: 'idt',
-    });
-    expect(res.secret).toBe('s');
+    const res = await authService.adminTotpSetup();
+    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/totp-setup', {});
+    expect(res.secret).toBe('s3cr3t');
   });
 
-  it('firebaseTotpVerify posts the id_token, otp, and remember_browser flag', async () => {
+  it('adminTotpVerify posts otp and remember_browser flag', async () => {
     (apiClient.post as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       status: 'ok',
-      token: 'tok',
+      token: 'verified-jwt',
     });
-    const res = await authService.firebaseTotpVerify('idt', '123456');
-    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/firebase-totp-verify', {
-      id_token: 'idt',
+    const res = await authService.adminTotpVerify('123456');
+    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/totp-verify', {
       otp: '123456',
       remember_browser: false,
     });
-    expect(res.token).toBe('tok');
+    expect(res.token).toBe('verified-jwt');
 
-    // Test with rememberBrowser = true
-    await authService.firebaseTotpVerify('idt', '123456', true);
-    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/firebase-totp-verify', {
-      id_token: 'idt',
+    await authService.adminTotpVerify('123456', true);
+    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/totp-verify', {
       otp: '123456',
       remember_browser: true,
     });
+  });
+
+  it('adminLogout posts to /api/admin/logout', async () => {
+    (apiClient.post as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    await authService.adminLogout();
+    expect(apiClient.post).toHaveBeenCalledWith('/api/admin/logout', {});
   });
 });
