@@ -59,15 +59,24 @@ vi.mock('./components/layout/WorkspaceLayout', () => ({
 }));
 vi.mock('./pages/PublicPages', () => ({
   default: () => <div>Guest chat</div>,
+  GuestChat: () => <div>Guest chat</div>,
+  PublicLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PublicHeader: () => null,
   ModelsPage: () => <div>Models page</div>,
   PublicInfoPage: ({ kind }: { kind: string }) => <div>{kind} page</div>,
   PricingPage: () => <div>Pricing page</div>,
-  // Issue #1521/#1523/#1524 follow-up: /features /docs /about route to their
-  // own distinct page components since #1514 — the mock here predated that
-  // split and the three smoke tests fell into the route-error fallback.
+  // Issue #1521/#1523/#1524 follow-up: /features /docs route to their own page
+  // components — distinct mocks keep the smoke tests honest.
   FeaturesPage: () => <div>/features page</div>,
   DocsPage: () => <div>/docs page</div>,
-  AboutPage: () => <div>/about page</div>,
+}));
+// Refs #876 (router restoration): the Cosmic public funnel is now a distinct
+// page at / — mocked here so the route smoke suite stays hermetic.
+vi.mock('./pages/LandingPage', () => ({
+  LandingPage: () => <div>Landing page</div>,
+}));
+vi.mock('./pages/OurStoryPage', () => ({
+  OurStoryPage: () => <div>Our story page</div>,
 }));
 vi.mock('./pages/ErrorPage', () => ({ default: ({ code }: { code: number }) => <div> Error {code}</div> }));
 vi.mock('./pages/auth/LoginPage', () => ({ LoginPage: () => <div>Login page</div> }));
@@ -87,12 +96,14 @@ function renderRoute(path: string) {
 
 describe('application route smoke tests', () => {
   it.each([
-    ['/', 'Guest chat'],
+    // Refs #876: '/' is the Cosmic landing page; guest chat lives at '/chat'.
+    ['/', 'Landing page'],
+    ['/chat', 'Guest chat'],
     ['/features', '/features page'],
     ['/models', 'Models page'],
     ['/pricing', 'Pricing page'],
     ['/docs', '/docs page'],
-    ['/about', '/about page'],
+    ['/about', 'Our story page'],
     ['/contact', '/contact page'],
     ['/login', 'Login page'],
     ['/register', 'Register page'],
@@ -116,5 +127,12 @@ describe('application route smoke tests', () => {
     );
     expect(screen.getByTestId('seed-knowledge-btn')).toBeInTheDocument();
     expect(screen.getByTestId('knowledge-search-input')).toBeInTheDocument();
+  });
+
+  // Refs #876 regression guard: the router must NEVER regress to a marketing-only
+  // subset again — with mocked guards, /workspace must render WorkspaceLayout.
+  it('keeps the authenticated workspace route mounted (P0 #876)', async () => {
+    const { container } = renderRoute('/workspace');
+    await waitFor(() => expect(container.querySelector('main')).toBeInTheDocument());
   });
 });
