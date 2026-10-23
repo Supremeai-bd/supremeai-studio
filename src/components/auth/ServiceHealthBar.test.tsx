@@ -5,7 +5,7 @@ import React from 'react';
 import { ServiceHealthBar } from './ServiceHealthBar';
 
 vi.mock('../../utils/api', () => ({
-  getApiBaseUrl: vi.fn(() => 'http://localhost:8080'),
+  getApiBaseUrl: vi.fn(() => 'https://supremeai-api-ulw0.onrender.com'),
 }));
 
 describe('ServiceHealthBar component', () => {
@@ -35,18 +35,21 @@ describe('ServiceHealthBar component', () => {
     expect(screen.getByText('Connecting to Node...')).toBeInTheDocument();
   });
 
-  it('renders healthy state when API succeeds', async () => {
+  it('renders healthy state when 5-node API succeeds', async () => {
     const mockData = {
       status: 'healthy',
       timestamp: Date.now(),
-      total_response_time_ms: 35,
+      total_response_time_ms: 120,
       checks: {
-        application: { status: 'healthy', message: 'OK', response_time_ms: 12 },
-        database: { status: 'healthy', message: 'OK', response_time_ms: 23 },
+        api: { name: 'API Gateway', status: 'healthy', message: 'Online', response_time_ms: 5 },
+        scraper: { name: 'Scraper Relay', status: 'healthy', message: 'Online', response_time_ms: 45 },
+        tower: { name: 'MCP Control Tower', status: 'healthy', message: 'Online', response_time_ms: 30 },
+        primary: { name: 'Primary Core Node', status: 'healthy', message: 'Online', response_time_ms: 20 },
+        worker: { name: 'Worker Node', status: 'healthy', message: 'Online', response_time_ms: 20 },
       },
       summary: {
-        total_checks: 2,
-        healthy: 2,
+        total_checks: 5,
+        healthy: 5,
         degraded: 0,
         unhealthy: 0,
         unknown: 0,
@@ -67,7 +70,7 @@ describe('ServiceHealthBar component', () => {
       expect(screen.getByText('Network Optimal')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('2/2')).toBeInTheDocument();
+    expect(screen.getByText('5/5')).toBeInTheDocument();
 
     // Click to toggle diagnostics modal
     const button = screen.getByTitle('Diagnostic Matrix (Click to toggle)');
@@ -75,8 +78,8 @@ describe('ServiceHealthBar component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('System Telemetry')).toBeInTheDocument();
-      expect(screen.getByText('Backend Core')).toBeInTheDocument();
-      expect(screen.getByText('Data Store (Postgres)')).toBeInTheDocument();
+      expect(screen.getByText('API Gateway')).toBeInTheDocument();
+      expect(screen.getByText('Scraper Relay')).toBeInTheDocument();
     });
   });
 
@@ -85,7 +88,7 @@ describe('ServiceHealthBar component', () => {
       Promise.resolve({
         ok: false,
         status: 500,
-        url: 'http://localhost:8080/api/health-aggregation',
+        url: 'https://supremeai-api-ulw0.onrender.com/api/health-aggregation',
         headers: { get: () => 'application/json' },
         text: async () => 'Internal Error',
       })
@@ -106,4 +109,3 @@ describe('ServiceHealthBar component', () => {
     });
   });
 });
-

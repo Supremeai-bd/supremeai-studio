@@ -3,16 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // বাংলা মন্তব্য: লগইন পেজের জন্য Public Service Health Bar — কোনো Authentication লাগবে না
+// 5 Render Fleet Nodes: API Gateway, Scraper Relay, MCP Control Tower, Primary Node, Worker Node
 import { apiClient } from '../../services/apiClient';
 
-interface HealthCheckResult {
+export interface HealthCheckResult {
+  name?: string;
   status: string;
-  message: string;
+  message?: string;
   details?: Record<string, unknown>;
   response_time_ms?: number;
 }
 
-interface HealthData {
+export interface HealthData {
   status: string;
   timestamp: number;
   total_response_time_ms: number;
@@ -26,17 +28,29 @@ interface HealthData {
   };
 }
 
-interface ServiceStatusProps {
+export interface ServiceStatusProps {
   name: string;
   status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown' | 'loading' | 'not_configured' | 'disabled';
   responseTime?: number;
 }
 
-const SERVICE_LABEL_MAP: Record<string, string> = {
+export const FLEET_NODES = [
+  { id: 'api', name: 'API Gateway', short: 'Gateway' },
+  { id: 'scraper', name: 'Scraper Relay', short: 'Scraper' },
+  { id: 'tower', name: 'MCP Control Tower', short: 'Tower' },
+  { id: 'primary', name: 'Primary Core Node', short: 'Core' },
+  { id: 'worker', name: 'Worker Node', short: 'Worker' },
+] as const;
+
+export const SERVICE_LABEL_MAP: Record<string, string> = {
+  api: 'API Gateway',
+  scraper: 'Scraper Relay',
+  tower: 'MCP Control Tower',
+  primary: 'Primary Core Node',
+  worker: 'Worker Node',
   application: 'Backend Core',
   database: 'Data Store (Postgres)',
   redis: 'Cache Cluster (Redis)',
-  scraper: 'Scraper Service',
   ollama: 'Local Ollama Node',
   memory: 'Compute Memory',
   disk: 'Storage Node',
@@ -44,7 +58,7 @@ const SERVICE_LABEL_MAP: Record<string, string> = {
   integrations: 'Integrations Bus',
 };
 
-const getServiceLabel = (key: string): string => {
+export const getServiceLabel = (key: string): string => {
   if (SERVICE_LABEL_MAP[key]) return SERVICE_LABEL_MAP[key];
   return key
     .replace(/_/g, ' ')
@@ -53,24 +67,24 @@ const getServiceLabel = (key: string): string => {
 
 const StatusDot: React.FC<{ status: ServiceStatusProps['status'] }> = ({ status }) => {
   const colors: Record<ServiceStatusProps['status'], string> = {
-    healthy: 'bg-emerald-500 shadow-emerald-500/50',
-    degraded: 'bg-amber-500 shadow-amber-500/50',
-    unhealthy: 'bg-red-500 shadow-red-500/50',
+    healthy: 'bg-emerald-400 shadow-emerald-400/50',
+    degraded: 'bg-amber-400 shadow-amber-400/50',
+    unhealthy: 'bg-rose-500 shadow-rose-500/50',
     unknown: 'bg-gray-500 shadow-gray-500/50',
-    loading: 'bg-blue-500 animate-pulse shadow-blue-500/50',
+    loading: 'bg-blue-400 animate-pulse shadow-blue-400/50',
     not_configured: 'bg-slate-500 shadow-slate-500/30',
     disabled: 'bg-slate-600 shadow-slate-600/30',
   };
 
   return (
-    <div className={`w-2 h-2 rounded-full ${colors[status]} shadow-sm`} />
+    <div className={`w-2 h-2 rounded-full ${colors[status] || colors.unknown} shadow-sm`} />
   );
 };
 
 const ServiceStatusItem: React.FC<ServiceStatusProps> = ({ name, status, responseTime }) => {
   const statusLabels: Record<ServiceStatusProps['status'], string> = {
     healthy: 'Online',
-    degraded: 'Slow',
+    degraded: 'Waking up',
     unhealthy: 'Down',
     unknown: 'Unknown',
     loading: 'Checking...',
@@ -81,7 +95,7 @@ const ServiceStatusItem: React.FC<ServiceStatusProps> = ({ name, status, respons
   const statusColors: Record<ServiceStatusProps['status'], string> = {
     healthy: 'text-emerald-400',
     degraded: 'text-amber-400',
-    unhealthy: 'text-red-400',
+    unhealthy: 'text-rose-400',
     unknown: 'text-gray-400',
     loading: 'text-blue-400',
     not_configured: 'text-slate-400',
@@ -99,10 +113,10 @@ const ServiceStatusItem: React.FC<ServiceStatusProps> = ({ name, status, respons
         <span className="text-xs font-medium text-gray-300">{name}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className={`text-xs font-semibold ${statusColors[status]}`}>
-          {statusLabels[status]}
+        <span className={`text-xs font-semibold ${statusColors[status] || 'text-gray-400'}`}>
+          {statusLabels[status] || 'Unknown'}
         </span>
-        {responseTime && status === 'healthy' && (
+        {responseTime !== undefined && status === 'healthy' && (
           <span className="text-[10px] text-gray-500 font-mono">
             {responseTime.toFixed(0)}ms
           </span>
@@ -114,16 +128,12 @@ const ServiceStatusItem: React.FC<ServiceStatusProps> = ({ name, status, respons
 
 // বাংলা মন্তব্য: Public Health Check Function — কোনো Auth Header ছাড়াই কল হবে
 const fetchPublicHealth = async (): Promise<HealthData> => {
-  
   try {
-    // Issue #2522: raw fetch -> apiClient.stream(auth:false) — public endpoint,
-    // তাই Authorization পাঠানো হয় না; timeout/queue ক্লায়েন্ট থেকে আসে।
     const res = await apiClient.stream('/api/health-aggregation', {
       method: 'GET',
       auth: false,
       headers: {
         'Content-Type': 'application/json',
-        // বাংলা: কোনো Authorization header নেই — public endpoint
       },
     });
 
@@ -147,32 +157,29 @@ const fetchPublicHealth = async (): Promise<HealthData> => {
       throw new Error(`Health check returned invalid JSON from ${res.url}`);
     }
   } catch (error) {
-
-    // The aggregate endpoint may be unavailable while the canonical liveness
-    // endpoint is healthy. Keep the status chip truthful instead of reporting
-    // individual services as down from a stale/degraded aggregate response.
     try {
-      // Issue #2522: raw fetch -> apiClient.get — 4s caller-signal এখন
-      // client timeout-এর সাথে AbortSignal.any দিয়ে combine হয়।
       const payload = await apiClient.get<{ status?: string; database?: string }>('/api/v1/health', {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(4000),
       });
-      {
-        const healthy = payload.status === 'healthy';
-        return {
-          status: healthy ? 'healthy' : 'degraded',
-          timestamp: Date.now(),
-          total_response_time_ms: 0,
-          checks: {
-            application: { status: healthy ? 'healthy' : 'degraded', message: 'Canonical health endpoint' },
-            ...(payload.database ? { database: { status: payload.database, message: 'Canonical health endpoint' } } : {}),
-          },
-          summary: { total_checks: payload.database ? 2 : 1, healthy: healthy ? (payload.database === 'healthy' ? 2 : 1) : 0, degraded: healthy ? (payload.database === 'healthy' ? 0 : 1) : 1, unhealthy: 0, unknown: 0 },
-        };
-      }
+      const healthy = payload.status === 'healthy';
+      return {
+        status: healthy ? 'healthy' : 'degraded',
+        timestamp: Date.now(),
+        total_response_time_ms: 0,
+        checks: {
+          application: { status: healthy ? 'healthy' : 'degraded', message: 'Canonical health endpoint' },
+          ...(payload.database ? { database: { status: payload.database, message: 'Canonical health endpoint' } } : {}),
+        },
+        summary: {
+          total_checks: payload.database ? 2 : 1,
+          healthy: healthy ? (payload.database === 'healthy' ? 2 : 1) : 0,
+          degraded: healthy ? (payload.database === 'healthy' ? 0 : 1) : 1,
+          unhealthy: 0,
+          unknown: 0,
+        },
+      };
     } catch (fallbackError) {
-      // Fall through to the user-facing connection state below.
       console.warn('Fallback health check skipped:', fallbackError);
     }
 
@@ -191,11 +198,9 @@ export const ServiceHealthBar: React.FC = () => {
     refetchInterval: (query) => (query.state.status === 'error' ? false : 20000), // 20 seconds refresh
     staleTime: 12_000,
     enabled: true,
-
   });
 
-
-  const getServiceStatus = (check: HealthCheckResult): ServiceStatusProps['status'] => {
+  const getServiceStatus = (check?: HealthCheckResult): ServiceStatusProps['status'] => {
     if (!check || !check.status) return 'unknown';
     return check.status as ServiceStatusProps['status'];
   };
@@ -203,6 +208,7 @@ export const ServiceHealthBar: React.FC = () => {
   const overallStatus = data?.status || (isError ? 'unhealthy' : 'loading');
   const isHealthy = overallStatus === 'healthy';
   const isDegraded = overallStatus === 'degraded';
+
   // Subtle label for public users
   const publicStatusLabel = isLoading
     ? 'Connecting to Node...'
@@ -214,56 +220,97 @@ export const ServiceHealthBar: React.FC = () => {
           ? 'High Concurrency'
           : 'Connecting...';
 
-  // Subtle accent dot colors
-  const dotColor = isLoading
-    ? 'bg-blue-400 animate-pulse shadow-blue-400/40'
-    : isError
-      ? 'bg-amber-500/80 shadow-amber-500/30'
-      : isHealthy
-        ? 'bg-emerald-400 shadow-emerald-400/50'
-        : isDegraded
-          ? 'bg-amber-400 shadow-amber-400/40'
-          : 'bg-rose-500 shadow-rose-500/40';
-
-  // Issue #1463: the detail slot once fell back to 'Synced' in unknown/error
-  // states, so the chip could read "Connecting... · Synced" at the same time.
-  // Now: measured latency when we have it, 'Synced' only when healthy, and an
-  // empty string (nothing rendered) in every transitional/degraded state.
-  // The '<50ms' fallback was also a fabricated number — removed.
   const avgLatency = data?.total_response_time_ms
     ? `${Math.round(data.total_response_time_ms)}ms`
     : isHealthy
       ? 'Synced'
       : '';
 
+  // 5 mini circles mapping: check if fleet nodes exist, else fallback to received check keys
+  const activeNodes = React.useMemo(() => {
+    if (!data?.checks) {
+      return FLEET_NODES.map((n) => ({
+        id: n.id,
+        name: n.name,
+        short: n.short,
+        status: (isLoading ? 'loading' : isError ? 'unhealthy' : 'unknown') as ServiceStatusProps['status'],
+        latency: undefined as number | undefined,
+      }));
+    }
+
+    const hasFleet = FLEET_NODES.some((n) => data.checks[n.id]);
+    if (hasFleet) {
+      return FLEET_NODES.map((n) => {
+        const check = data.checks[n.id];
+        return {
+          id: n.id,
+          name: n.name,
+          short: n.short,
+          status: getServiceStatus(check),
+          latency: check?.response_time_ms,
+        };
+      });
+    }
+
+    // Dynamic keys if different schema
+    return Object.entries(data.checks).map(([key, check]) => ({
+      id: key,
+      name: getServiceLabel(key),
+      short: key.toUpperCase(),
+      status: getServiceStatus(check),
+      latency: check?.response_time_ms,
+    }));
+  }, [data, isLoading, isError]);
+
+  const getNodeColor = (status: ServiceStatusProps['status']) => {
+    switch (status) {
+      case 'healthy':
+        return 'bg-emerald-400 shadow-emerald-400/50';
+      case 'degraded':
+        return 'bg-amber-400 shadow-amber-400/50';
+      case 'unhealthy':
+        return 'bg-rose-500 shadow-rose-500/50';
+      case 'loading':
+        return 'bg-blue-400 animate-pulse shadow-blue-400/50';
+      default:
+        return 'bg-gray-500 shadow-gray-500/30';
+    }
+  };
+
   return (
-    <div className="relative flex flex-col items-center select-none">
-      {/* 🚀 Stealth Ambient Chip: Looks like a sleek tech design pill to normal users */}
+    <div className="relative flex flex-col items-center select-none" data-testid="fleet-health-bar">
+      {/* 🚀 5-Node Fleet Health Pill */}
       <motion.button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        className="group relative flex items-center gap-2.5 rounded-full border border-[var(--sa-border)] bg-[var(--sa-surface)] px-3.5 py-1.5 shadow-sm transition-colors hover:border-[var(--sa-primary)] cursor-pointer"
+        className="group relative flex items-center gap-3 rounded-full border border-white/10 bg-black/40 px-3.5 py-1.5 shadow-sm backdrop-blur-md transition-all hover:border-emerald-500/40 hover:bg-black/60 cursor-pointer"
         title="Diagnostic Matrix (Click to toggle)"
       >
-        <span className="relative flex h-2 w-2">
-          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 ${dotColor}`} />
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${dotColor}`} />
-        </span>
+        {/* 5 mini status circles */}
+        <div className="flex items-center gap-1.5" aria-label="Render fleet node health">
+          {activeNodes.map((node) => (
+            <span
+              key={node.id}
+              className={`relative inline-flex rounded-full h-2 w-2 transition-colors ${getNodeColor(node.status)}`}
+              title={`${node.name}: ${node.status}${node.latency !== undefined ? ` (${node.latency}ms)` : ''}`}
+            />
+          ))}
+        </div>
 
-        <span className="text-[11px] font-mono tracking-wide text-[var(--sa-ink-muted)] group-hover:text-[var(--sa-ink)] transition-colors">
+        <span className="text-[11px] font-mono tracking-wide text-slate-300 group-hover:text-white transition-colors">
           {publicStatusLabel}
         </span>
 
         {(data?.summary || avgLatency) && (
-          <span className="border-l border-[var(--sa-border)] pl-2 text-[10px] font-mono text-[var(--sa-ink-muted)] transition-colors group-hover:text-[var(--sa-primary)]">
+          <span className="border-l border-white/10 pl-2.5 text-[10px] font-mono text-slate-400 transition-colors group-hover:text-emerald-400">
             {data?.summary ? `${data.summary.healthy}/${data.summary.total_checks}` : avgLatency}
           </span>
         )}
       </motion.button>
 
-      {/* 🔍 Secret Diagnostics Modal/Dropdown for those who know */}
+      {/* 🔍 Diagnostics Modal / Fleet Matrix Drawer */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -274,8 +321,12 @@ export const ServiceHealthBar: React.FC = () => {
             className="absolute top-10 z-50 w-80 p-3.5 rounded-2xl bg-black/85 border border-white/10 backdrop-blur-xl shadow-2xl shadow-black/80 text-left"
           >
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
-              <div className="flex items-center gap-1.5">
-                <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {activeNodes.map((node) => (
+                    <div key={node.id} className={`w-1.5 h-1.5 rounded-full ${getNodeColor(node.status)}`} />
+                  ))}
+                </div>
                 <span className="text-xs font-mono font-semibold text-gray-200">System Telemetry</span>
               </div>
               <span className="text-[10px] font-mono text-gray-500" title="Time of the latest backend health check">
@@ -289,18 +340,18 @@ export const ServiceHealthBar: React.FC = () => {
               <div className="py-2 text-[11px] font-mono text-rose-400">
                 Connection check: {error?.message || 'Server unreachable'}
               </div>
-            ) : isLoading || !data ? (
+            ) : isLoading && !data ? (
               <div className="py-3 text-center text-xs font-mono text-gray-400 animate-pulse">
                 Probing clusters...
               </div>
             ) : (
               <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                {Object.entries(data.checks || {}).map(([key, check]) => (
+                {activeNodes.map((node) => (
                   <ServiceStatusItem
-                    key={key}
-                    name={getServiceLabel(key)}
-                    status={getServiceStatus(check)}
-                    responseTime={check?.response_time_ms}
+                    key={node.id}
+                    name={node.name}
+                    status={node.status}
+                    responseTime={node.latency}
                   />
                 ))}
               </div>
