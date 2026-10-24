@@ -246,8 +246,8 @@ export function AdminShell() {
 
   if (adminAuthenticated && adminRole !== 'admin') {
     return (
-      <div className="flex h-screen bg-[#0A0A0A] text-white items-center justify-center font-sans">
-        <div className="w-[400px] p-8 rounded-2xl bg-white/5 border border-red-500/30 text-center flex flex-col items-center gap-4">
+      <div className="flex min-h-screen w-full bg-[#0A0A0A] text-white items-center justify-center font-sans px-4">
+        <div className="w-full max-w-sm p-8 rounded-2xl bg-white/5 border border-red-500/30 text-center flex flex-col items-center gap-4">
           <Shield className="w-16 h-16 text-red-500" />
           <h1 className="text-2xl font-semibold">Access Denied</h1>
           <p className="text-sm text-gray-400">You do not have the required "admin" role to access this dashboard.</p>

@@ -67,7 +67,7 @@ export const AIStudio: React.FC = () => {
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-[var(--sa-canvas)] text-[var(--sa-ink)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.12),transparent_64%)]" aria-hidden="true" />
       {/* AI Studio contextual header */}
-      <div className="relative flex min-h-16 shrink-0 items-center justify-between border-b border-[var(--sa-border)] bg-[var(--sa-surface)]/80 px-4 backdrop-blur sm:px-6">
+      <div className="relative flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--sa-border)] bg-[var(--sa-surface)]/80 px-4 backdrop-blur sm:px-6">
         <div className="flex items-center gap-4 text-xs font-medium">
           <button 
             onClick={() => setActiveTab('chat')}
