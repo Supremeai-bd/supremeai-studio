@@ -162,9 +162,17 @@ export interface UnifiedState {
   dashboardMode: 'simple' | 'advanced';
   chatTabTerminalOpen: boolean;
   chatTabBrowserOpen: boolean;
+  chatTabMobileOpen: boolean;
   toggleDashboardMode: () => void;
+  setDashboardMode: (mode: 'simple' | 'advanced') => void;
   toggleTerminal: () => void;
   toggleBrowser: () => void;
+  toggleMobile: () => void;
+  setChatTabTerminalOpen: (open: boolean) => void;
+  setChatTabBrowserOpen: (open: boolean) => void;
+  setChatTabMobileOpen: (open: boolean) => void;
+  isDeploymentModalOpen: boolean;
+  setDeploymentModal: (open: boolean) => void;
 
   
   // ── UTILITIES ──
@@ -201,6 +209,8 @@ const initialState = {
   dashboardMode: 'simple' as 'simple' | 'advanced',
   chatTabTerminalOpen: true,
   chatTabBrowserOpen: true,
+  chatTabMobileOpen: false,
+  isDeploymentModalOpen: false,
   currentUserId: null as string | null,
   userPreferences: {} as Record<string, unknown>,
 };
@@ -421,8 +431,14 @@ export const useUnifiedStore = create<UnifiedState>()(
     setActivePanel: (panel) => set({ activePanel: panel }),
     toggleDashboardMode: () =>
       set((state) => ({ dashboardMode: state.dashboardMode === 'simple' ? 'advanced' : 'simple' })),
+    setDashboardMode: (mode) => set({ dashboardMode: mode }),
     toggleTerminal: () => set((state) => ({ chatTabTerminalOpen: !state.chatTabTerminalOpen })),
     toggleBrowser: () => set((state) => ({ chatTabBrowserOpen: !state.chatTabBrowserOpen })),
+    toggleMobile: () => set((state) => ({ chatTabMobileOpen: !state.chatTabMobileOpen })),
+    setChatTabTerminalOpen: (open) => set({ chatTabTerminalOpen: open }),
+    setChatTabBrowserOpen: (open) => set({ chatTabBrowserOpen: open }),
+    setChatTabMobileOpen: (open) => set({ chatTabMobileOpen: open }),
+    setDeploymentModal: (open) => set({ isDeploymentModalOpen: open }),
 
     resetState: () => set(initialState),
     

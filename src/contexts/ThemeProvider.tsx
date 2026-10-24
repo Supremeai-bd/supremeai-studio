@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { adminTokenStore } from '../services/adminTokenStore';
-import { THEME_ORDER } from './ThemeConstants';
+import { THEME_ORDER, isDarkTheme } from './ThemeConstants';
 import { ThemeContext } from './ThemeContext';
 import type { Theme } from './ThemeConstants';
 import { apiClient } from '../services/apiClient';
@@ -55,46 +55,40 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // বাংলা মন্তব্য: HTML root ও body এলিমেন্টে থিম ক্লাস অ্যাড করা হচ্ছে
     const root = window.document.documentElement;
     const body = window.document.body;
-    const classes = ['light', 'dark', 'sunset', 'matrix'];
-    root.classList.remove(...classes);
+    root.classList.remove(...THEME_ORDER);
     root.classList.add(theme);
     root.setAttribute('data-theme', theme);
     if (body) {
-      body.classList.remove(...classes);
+      body.classList.remove(...THEME_ORDER);
       body.classList.add(theme);
       body.setAttribute('data-theme', theme);
     }
   }, [theme]);
 
-  const toggleTheme = () => {
-    // বাংলা মন্তব্য: পরবর্তী থিমে সাইকেল করা হচ্ছে (dark → light → sunset → matrix → dark)
-    const currentIndex = THEME_ORDER.indexOf(theme);
-    const nextIndex = (currentIndex + 1) % THEME_ORDER.length;
-    const newTheme = THEME_ORDER[nextIndex];
-
-    // Optimistic UI Update
+  const changeTheme = (newTheme: Theme) => {
     setTheme(newTheme);
     localStorage.setItem('supremeai-theme-storage', JSON.stringify({ state: { theme: newTheme }, version: 0 }));
     localStorage.removeItem('supremeai_theme');
 
-    // ব্যাকএন্ডে async সিঙ্ক করা
-    // ERR-H01 FIX: real backend route is POST /api/preferences/ (mounted at
-    // prefix /api + router /preferences) — /api/v1/preferences never existed (404).
-    // Issue #2475: canonical mounted path carries a trailing slash — call it
-    // exactly so the request no longer depends on FastAPI's 307 redirect.
     apiClient.post('/api/preferences/', { theme: newTheme })
       .catch(err => console.error('Failed to sync theme to DB:', err));
 
     eventBus.emit(Events.THEME_CHANGED, {
       theme: newTheme,
-      isDark: newTheme === 'dark' || newTheme === 'matrix',
+      isDark: isDarkTheme(newTheme),
       timestamp: Date.now(),
       source: 'theme_provider',
     });
   };
 
+  const toggleTheme = () => {
+    const currentIndex = THEME_ORDER.indexOf(theme);
+    const nextIndex = (currentIndex + 1) % THEME_ORDER.length;
+    changeTheme(THEME_ORDER[nextIndex]);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme: changeTheme }}>
       {children}
     </ThemeContext.Provider>
   );
