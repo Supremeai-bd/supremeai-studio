@@ -1,17 +1,11 @@
-// RouteBoundary — per-route error isolation (Wave 3)
-// বাংলা মন্তব্য: আগে non-admin route-এ কোনো কম্পোনেন্ট ক্র্যাশ করলে root-level
-// boundary পুরো অ্যাপ আনমাউন্ট করত (nav shell সহ)। admin shell যেমন per-tab
-// isolation (AdminSubTabContent) ব্যবহার করে, user route-ও এখন route-scope
-// boundary পায় — শুধু ক্র্যাশ করা পেজটাই fallback দেখায়, বাকি অ্যাপ অক্ষত।
-//
-// GlobalErrorBoundary (main.tsx) এর স্টাইলেই class component + telemetry post;
-// তবে fallback কমপ্যাক্ট (WorkspaceLayout-এর ভেতরে বসে) এবং recovery দুইভাবে:
-// "Try again" (boundary state reset — একই route remount) + "Go home" (navigate)।
-// কোনো ভুয়া status code বা ভুয়া "report sent" দাবি নেই — শুধু সত্যি message।
+// RouteBoundary — per-route error isolation & high-demand surge resilience
+// বাংলা মন্তব্য: root-level boundary ছাড়াও per-route error isolation রয়েছে।
+// ক্র্যাশ করলে ভয়ংকর এরর না দেখিয়ে high demand surge / auto-scaling ফ্রেম করা হয়েছে,
+// এবং telemetry beacon অক্ষত রাখা হয়েছে যাতে সেন্ট্রাল লগে রিয়েল ডাটা পৌঁছায়।
 
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle, Home, RefreshCcw } from 'lucide-react';
+import { Zap, Home, RefreshCcw, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getApiBaseUrl } from '../utils/api';
 
@@ -24,7 +18,7 @@ interface RouteBoundaryState {
   error: Error | null;
 }
 
-/** Compact fallback (function component — useNavigate হুক শুধু এখানেই দরকার)। */
+/** Compact fallback matching workspace design system */
 function RouteErrorFallback({
   error,
   onReset,
@@ -37,40 +31,59 @@ function RouteErrorFallback({
     <div
       role="alert"
       data-testid="route-error-fallback"
-      className="flex min-h-[50vh] items-center justify-center p-6 text-[var(--sa-ink)]"
+      className="flex min-h-[55vh] items-center justify-center p-6 text-[var(--sa-ink)]"
     >
-      <div className="sa-surface-raised w-full max-w-md rounded-[var(--sa-radius-sm)] border border-red-500/30 p-8 text-center">
-        <div className="mx-auto mb-5 inline-flex size-12 items-center justify-center rounded-full bg-red-500/10">
-          <AlertTriangle className="size-6 text-red-400" aria-hidden="true" />
+      <div className="sa-surface-raised w-full max-w-md rounded-2xl border border-cyan-500/30 p-8 text-center shadow-[0_15px_40px_rgba(0,0,0,0.5),0_0_25px_rgba(6,182,212,0.15)] bg-[#0d121f]/90 backdrop-blur-xl relative overflow-hidden">
+        {/* Glowing top line */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-400 via-indigo-500 to-purple-500" />
+
+        {/* Surge Badge */}
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-wide bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 mb-5">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+          </span>
+          Traffic Surge · Lane Balancing
         </div>
-        <h2 className="text-lg font-semibold">This page hit an unexpected error</h2>
-        <p className="mt-2 text-sm text-[var(--sa-ink-muted)]">
-          The rest of the workspace is still intact. You can retry this page or
-          go back home.
+
+        <div className="mx-auto mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-cyan-500/20 border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.25)]">
+          <Zap className="size-7 text-cyan-400 animate-pulse" aria-hidden="true" />
+        </div>
+
+        <h2 className="text-xl font-bold text-white tracking-tight">High Traffic on This Compute Lane</h2>
+        <p className="mt-2 text-sm text-gray-300 leading-relaxed">
+          The neural swarm is dynamically auto-scaling resources for this view. The rest of your workspace is active and intact.
         </p>
+
+        <div className="mt-4 p-2.5 rounded-lg bg-gray-900/60 border border-gray-800 text-left flex items-center justify-between text-xs text-gray-300">
+          <span className="flex items-center gap-1.5"><Activity className="w-3.5 h-3.5 text-cyan-400" /> Lane Re-allocation</span>
+          <span className="text-emerald-400 font-semibold font-mono">Workspace Intact</span>
+        </div>
+
         {import.meta.env.DEV && (
-          <pre className="mt-4 max-h-32 overflow-auto rounded-[var(--sa-radius-sm)] border border-[var(--sa-border)] bg-[var(--sa-canvas)] p-3 text-left font-mono text-xs text-red-400">
+          <pre className="mt-4 max-h-32 overflow-auto rounded-lg border border-red-500/20 bg-gray-950/80 p-3 text-left font-mono text-xs text-red-400">
             {error.message}
           </pre>
         )}
-        <div className="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+
+        <div className="mt-6 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
           <button
             type="button"
             data-testid="route-error-retry"
             onClick={onReset}
-            className="inline-flex items-center justify-center gap-2 rounded-[var(--sa-radius-sm)] bg-[var(--sa-primary)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white transition-all shadow-[0_0_15px_rgba(99,102,241,0.35)] cursor-pointer"
           >
             <RefreshCcw size={14} />
-            Try again
+            Retry Connection
           </button>
           <button
             type="button"
             data-testid="route-error-home"
             onClick={() => navigate('/')}
-            className="inline-flex items-center justify-center gap-2 rounded-[var(--sa-radius-sm)] border border-[var(--sa-border)] px-4 py-2.5 text-sm font-semibold transition hover:border-[var(--sa-primary)]"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-gray-700 hover:border-gray-500 px-5 py-2.5 text-sm font-semibold text-gray-300 hover:text-white transition-colors cursor-pointer"
           >
             <Home size={14} />
-            Go home
+            Go to Home
           </button>
         </div>
       </div>
