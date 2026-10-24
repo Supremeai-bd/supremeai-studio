@@ -99,7 +99,10 @@ export const NAVIGATION_REGISTRY: NavGroup[] = [
       { id: 'nav-home', label: 'Home', icon: Home, kind: 'route', path: '/workspace', contexts: ['user'], status: 'implemented', priority: 10 },
       // M10 (issue #453) বাংলা: Tier-S ChatInterface host — /chat রুটে মাউন্ট করা
       // হয়েছে; share/export/search/slash/branch ফিচারগুলোর প্রথম লাইভ হোম।
-      { id: 'nav-chat', label: 'Chat', icon: MessagesSquare, kind: 'route', path: '/chat', contexts: ['user'], status: 'implemented', priority: 15 },
+      // FIX(nav-truth 2026-10-24): user-context "Chat" pointed at the public guest
+      // chat (/chat) — logged-in users landed on the guest surface with
+      // Sign-in/Get-started chrome. It now targets the shared unified chat surface.
+      { id: 'nav-chat', label: 'Chat', icon: MessagesSquare, kind: 'route', path: '/workspace/live', contexts: ['user'], status: 'implemented', priority: 15 },
       { id: 'nav-ai-studio', label: 'AI Studio', icon: MessageSquare, kind: 'route', path: '/workspace/live', contexts: ['user'], status: 'implemented', priority: 20 },
       { id: 'nav-agents', label: 'Agents', icon: Cpu, kind: 'route', path: '/workspace/agent', contexts: ['user'], status: 'implemented', priority: 30 },
       // Planned features — routes not yet implemented; rendered হয় না (dead-link prevention)।
@@ -124,7 +127,10 @@ export const NAVIGATION_REGISTRY: NavGroup[] = [
     contexts: ['user'],
     items: [
       { id: 'nav-skills', label: 'Skills', icon: Box, kind: 'route', path: '/skills-catalog', contexts: ['user'], status: 'implemented', priority: 10 },
-      { id: 'nav-integrations', label: 'Integrations', icon: Plug, kind: 'route', path: '/integrations', contexts: ['user'], status: 'implemented', priority: 20 },
+      // FIX(nav-truth 2026-10-24): no /integrations route or page exists yet —
+      // dead-link prevention (registry header rule) moves it to 'planned' (hidden)
+      // until a real route lands.
+      { id: 'nav-integrations', label: 'Integrations', icon: Plug, kind: 'route', path: '/integrations', contexts: ['user'], status: 'planned', priority: 20 },
       { id: 'nav-marketplace', label: 'Marketplace', icon: Plug, kind: 'route', path: '/marketplace', contexts: ['user'], status: 'implemented', priority: 30 },
     ],
   },
@@ -244,7 +250,7 @@ const SIMPLE_VIEWER_ENTRY_IDS = new Set([
   // nav-এও দৃশ্যমান হওয়া উচিত।
   'nav-chat',
   'nav-prompt-library',
-  'nav-integrations',
+  // FIX(nav-truth 2026-10-24): removed — no /integrations route exists yet.
   'nav-profile',
   'nav-settings',
 ]);

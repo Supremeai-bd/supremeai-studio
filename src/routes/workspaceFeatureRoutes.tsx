@@ -11,6 +11,20 @@ const SharedConversationPage = lazy(
 const PromptTemplatePage = lazy(
   () => import('../pages/PromptTemplatePage'),
 );
+// FIX(nav-truth 2026-10-24): these page files existed but were never registered
+// here — every nav/dashboard link to them 404'd into the guest landing. All of
+// them self-wrap WorkspaceLayout EXCEPT WorkspaceSettingsPage (adapter), which
+// is wrapped below.
+const ProjectsPage = lazy(() => import('../pages/ProjectsPage'));
+const ActivityPage = lazy(() => import('../pages/ActivityPage'));
+const MarketplacePage = lazy(() => import('../pages/MarketplacePage'));
+const RunsPage = lazy(() => import('../pages/RunsPage'));
+const FilesPage = lazy(() => import('../pages/FilesPage'));
+const BillingPage = lazy(() => import('../pages/BillingPage'));
+const ProfilePage = lazy(() => import('../pages/ProfilePage'));
+const WorkspaceSettingsPage = lazy(
+  () => import('../pages/user/WorkspaceSettingsPage'),
+);
 
 // ─── Route definitions ───────────────────────────────────────────────────
 
@@ -24,6 +38,22 @@ const PromptTemplatePage = lazy(
  * ProtectedRoute দিয়ে wrap করা হলো (roadmap security matrix: সব authenticated
  * user context route protected হবে)।
  */
+function protectedPage(label: string, node: React.ReactNode) {
+  return (
+    <ProtectedRoute>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-400">
+            <div className="animate-pulse">Loading {label}…</div>
+          </div>
+        }
+      >
+        {node}
+      </Suspense>
+    </ProtectedRoute>
+  );
+}
+
 export const workspaceFeatureRoutes: RouteObject[] = [
   {
     path: '/share/:shareId',
@@ -55,6 +85,24 @@ export const workspaceFeatureRoutes: RouteObject[] = [
           </WorkspaceLayout>
         </Suspense>
       </ProtectedRoute>
+    ),
+  },
+  // FIX(nav-truth 2026-10-24): registered existing self-wrapping feature pages
+  // so user nav/dashboard links stop 404-ing into the guest landing.
+  { path: '/projects', element: protectedPage('projects', <ProjectsPage />) },
+  { path: '/activity', element: protectedPage('activity', <ActivityPage />) },
+  { path: '/marketplace', element: protectedPage('marketplace', <MarketplacePage />) },
+  { path: '/runs', element: protectedPage('runs', <RunsPage />) },
+  { path: '/files', element: protectedPage('files', <FilesPage />) },
+  { path: '/billing', element: protectedPage('billing', <BillingPage />) },
+  { path: '/profile', element: protectedPage('profile', <ProfilePage />) },
+  {
+    path: '/settings',
+    element: protectedPage(
+      'settings',
+      <WorkspaceLayout>
+        <WorkspaceSettingsPage />
+      </WorkspaceLayout>,
     ),
   },
 ];

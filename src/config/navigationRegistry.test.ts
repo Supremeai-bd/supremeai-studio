@@ -9,7 +9,11 @@ describe('canonical navigation registry', () => {
       .map((item) => item.path);
 
     expect(paths).toContain('/workspace');
-    expect(paths).toContain('/integrations');
+    // FIX(nav-truth 2026-10-24): /integrations has no route yet — the registry
+    // entry is 'planned' (hidden) per dead-link prevention, so it must NOT appear.
+    expect(paths).not.toContain('/integrations');
+    // The user-context Chat entry now targets the shared unified chat surface.
+    expect(paths).toContain('/workspace/live');
     expect(paths).not.toContain('/swarm');
     expect(paths).not.toContain('/evolution-forge');
     expect(paths).not.toContain('/architect-tower');
