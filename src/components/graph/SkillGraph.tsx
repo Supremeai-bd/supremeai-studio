@@ -20,7 +20,9 @@ interface GraphData {
   edges: { id: string; source: string; target: string; label: string }[];
 }
 
-import { apiClient } from '../../services/apiClient';
+import { getApiBaseUrl } from '../../utils/api';
+import { adminTokenStore } from '../../services/adminTokenStore';
+import { getAdminToken } from '../../services/tokenStorage';
 
 export default function SkillGraph() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -29,9 +31,19 @@ export default function SkillGraph() {
   // বাংলা মন্তব্য: ব্যাকএন্ড থেকে গ্রাফ ডেটা ফেচ করার ফাংশন
   const fetchGraphData = async () => {
     try {
-      // Issue #2522: raw fetch -> apiClient.get — auth/timeout/queue অটোমেটিক
-      // (manual Bearer header আর দরকার নেই, ক্লায়েন্ট token storage থেকে নেয়)।
-      const data = await apiClient.get<GraphData>('/api/v1/graph/skills');
+      const decodedToken = adminTokenStore.getDecodedToken();
+      const token = getAdminToken();
+
+      const response = await fetch(`${getApiBaseUrl()}/api/v1/graph/skills`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token || decodedToken}`
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch graph data');
+
+      const data: GraphData = await response.json();
 
       // বাংলা মন্তব্য: নোডগুলোকে একটি জ্যামিতিক বৃত্তাকার (Circular) লেআউটে সাজানোর লজিক
       const radius = 250;

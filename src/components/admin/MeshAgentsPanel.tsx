@@ -13,8 +13,7 @@
  * default 10 min — the backend already filters, the badge mirrors it).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiClient } from '../../services/apiClient';
-import { TimeAgo } from '../ui/TimeAgo';
+import { getApiBaseUrl } from '../../utils/api';
 
 const VALID_ROLES = ['planner', 'coder', 'tester', 'gate', 'observer'] as const;
 type MeshRole = (typeof VALID_ROLES)[number];
@@ -53,7 +52,8 @@ interface MeshNode {
   last_seen_epoch: number;
 }
 
-function presenceLabelFromAge(ageSec: number): { text: string; online: boolean } {
+function presenceLabel(lastSeenEpoch: number, nowEpoch: number): { text: string; online: boolean } {
+  const ageSec = Math.max(0, Math.round(nowEpoch - lastSeenEpoch));
   const online = ageSec < 10 * 60; // presence registry TTL (default 10 min)
   const text =
     ageSec < 60
@@ -70,8 +70,7 @@ export function MeshAgentsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [roleError, setRoleError] = useState<{ nodeId: string; message: string } | null>(null);
-  // #2736: প্যানেল-লেভেল 1s `setNowEpoch` tick বাদ — presence-টেক্সট এখন
-  // <TimeAgo> leaf-এ (নিজস্ব 30s tick, শুধু ওই span re-render হয়)।
+  const [nowEpoch, setNowEpoch] = useState(() => Date.now() / 1000);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -83,8 +82,11 @@ export function MeshAgentsPanel() {
 
   const fetchNodes = useCallback(async () => {
     try {
-      // Issue #2522: raw fetch -> apiClient.get — auth হেডার এখন যাচ্ছে (আগে ছিল না), timeout/queue সহ।
-      const data = await apiClient.get<{ nodes?: MeshNode[] } | MeshNode[]>('/api/v1/nodes');
+      const res = await fetch(`${getApiBaseUrl()}/api/v1/nodes`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`GET /nodes -> HTTP ${res.status}`);
+      const data = (await res.json()) as { nodes?: MeshNode[] } | MeshNode[];
       const list = Array.isArray(data) ? data : (data.nodes ?? []);
       if (mountedRef.current) {
         setNodes(list);
@@ -102,9 +104,10 @@ export function MeshAgentsPanel() {
   useEffect(() => {
     void fetchNodes();
     const poll = setInterval(() => void fetchNodes(), 10_000);
-    // #2736: 1s clock-tick interval সরানো হয়েছে — presence UI <TimeAgo> leaf-এ।
+    const tick = setInterval(() => setNowEpoch(Date.now() / 1000), 1_000);
     return () => {
       clearInterval(poll);
+      clearInterval(tick);
     };
   }, [fetchNodes]);
 
@@ -115,8 +118,16 @@ export function MeshAgentsPanel() {
       // Optimistic update
       setNodes(prev => prev.map(n => (n.node_id === nodeId ? { ...n, role } : n)));
       try {
-        // Issue #2522: raw fetch -> apiClient.patch — non-ok হলে ApiError (status সহ)।
-        const data = await apiClient.patch<{ node?: MeshNode }>(`/api/v1/nodes/${encodeURIComponent(nodeId)}`, { role });
+        const res = await fetch(`${getApiBaseUrl()}/api/v1/nodes/${encodeURIComponent(nodeId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role }),
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(() => null);
+          throw new Error(detail?.detail ?? `HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as { node?: MeshNode };
         if (data.node) {
           setNodes(prev => prev.map(n => (n.node_id === nodeId ? data.node! : n)));
         }
@@ -167,6 +178,7 @@ export function MeshAgentsPanel() {
       ) : (
         <ul className="divide-y divide-zinc-900 max-h-96 overflow-y-auto">
           {nodes.map(node => {
+            const presence = presenceLabel(node.last_seen_epoch, nowEpoch);
             const isPending = pending.has(node.node_id);
             return (
               <li key={node.node_id} className="py-2 flex items-center gap-3">
@@ -178,24 +190,13 @@ export function MeshAgentsPanel() {
                     {node.node_id}
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                    {/* #2736: presence badge + "seen Xs ago" — TimeAgo leaf-এর
-                        ভেতরে, তাই 30s tick-এ শুধু এই লাইন-ই বদলায়, পুরো প্যানেল নয় */}
-                    <TimeAgo epoch={node.last_seen_epoch}>
-                      {(ageSec) => {
-                        const presence = presenceLabelFromAge(ageSec);
-                        return (
-                          <>
-                            <span
-                              className={`inline-block h-1.5 w-1.5 rounded-full ${presence.online ? 'bg-emerald-400' : 'bg-zinc-600'}`}
-                              aria-label={presence.online ? 'online' : 'stale'}
-                            />
-                            <span>{node.node_type}</span>
-                            <span>·</span>
-                            <span>seen {presence.text}</span>
-                          </>
-                        );
-                      }}
-                    </TimeAgo>
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${presence.online ? 'bg-emerald-400' : 'bg-zinc-600'}`}
+                      aria-label={presence.online ? 'online' : 'stale'}
+                    />
+                    <span>{node.node_type}</span>
+                    <span>·</span>
+                    <span>seen {presence.text}</span>
                     {node.load?.cpu_percent != null && (
                       <>
                         <span>·</span>

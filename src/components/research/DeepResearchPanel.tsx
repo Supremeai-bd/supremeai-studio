@@ -15,7 +15,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
-import { safeUrl } from '../../lib/safeUrl';
+import { getApiBaseUrl } from '../../utils/api';
+import { getAdminToken, getUserToken } from '../../services/tokenStorage';
 import { globalShowToastRef } from '../../contexts/ToastContext';
 import { parseResearchSseLine } from './researchEventContract';
 
@@ -158,15 +159,18 @@ export default function DeepResearchPanel() {
     abortRef.current = new AbortController();
 
     try {
+      // Issue #521: tokenStorage (sessionStorage-first, legacy localStorage swept).
+      const token = getUserToken() || getAdminToken();
       // Issue #452 fix: window.location.origin breaks whenever the API lives on
       // a different origin than the frontend — use the canonical base URL
       // helper like every other panel.
-      // Issue #2522: raw fetch -> apiClient.stream — token ক্লায়েন্ট বসায়,
-      // timeout/queue/cold-start retry + abort passthrough অটোমেটিক।
-      const response = await apiClient.stream('/api/research/deep/stream', {
+      const baseUrl = getApiBaseUrl();
+
+      const response = await fetch(`${baseUrl}/api/research/deep/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           Accept: 'text/event-stream',
         },
         body: JSON.stringify({ query: query.trim() }),
@@ -421,8 +425,7 @@ export default function DeepResearchPanel() {
                       {displayReport.sources.map((source, i) => (
                         <a
                           key={i}
-                          // বাংলা মন্তব্য: safeUrl allowlist (#2520)
-                          href={safeUrl(source.url)}
+                          href={source.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={
@@ -576,8 +579,7 @@ export default function DeepResearchPanel() {
                       {viewingReport.sources.map((source, i) => (
                         <a
                           key={i}
-                          // বাংলা মন্তব্য: safeUrl allowlist (#2520)
-                          href={safeUrl(source.url)}
+                          href={source.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={

@@ -79,7 +79,6 @@ import type {
   JobResult,
   TrendChartPoint,
 } from './ci-dashboard/types';
-import { apiClient } from '../../../services/apiClient';
 
 export function CIDashboard({
   repoName,
@@ -117,18 +116,12 @@ export function CIDashboard({
       const base = apiUrl
         ? apiUrl.replace(/\/api\/ci\/latest-summary$/, '')
         : getApiBaseUrl();  // roadmap 1.5 (#1180): canonical resolver
-      // Issue #2522: raw fetch -> apiClient.get — non-ok হলে ApiError → catch এ
-      // empty-state; "history is optional" সেমান্টিকস অটুট।
-      const payload = await apiClient.get<unknown>(
-        apiUrl ? `${base}/api/ci/history?limit=12` : '/api/ci/history?limit=12',
-      );
-      const source: unknown = payload;
-      const runs: Array<Record<string, unknown>> = Array.isArray(source)
-        ? (source as Array<Record<string, unknown>>)
-        : ((source as { history?: Array<Record<string, unknown>>; items?: Array<Record<string, unknown>>; runs?: Array<Record<string, unknown>> }).history
-          ?? (source as { items?: Array<Record<string, unknown>> }).items
-          ?? (source as { runs?: Array<Record<string, unknown>> }).runs
-          ?? []);
+      const response = await fetch(`${base}/api/ci/history?limit=12`);
+      if (!response.ok) return; // history is optional — never block the dashboard
+      const payload = await response.json();
+      const runs: Array<Record<string, unknown>> = Array.isArray(payload)
+        ? payload
+        : payload.history || payload.items || payload.runs || [];
       const points = runs
         .map((run) => {
           const successRate = typeof run.success_rate === 'number' ? run.success_rate : Number(run.success_rate) || 0;
@@ -153,10 +146,12 @@ export function CIDashboard({
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      // Issue #2522: raw fetch -> apiClient.get (roadmap 1.5 #1180 base রেজলুশন অটুট)।
-      const result = await apiClient.get<CISummaryData>(
-        apiUrl || '/api/ci/latest-summary',
-      );
+      const url = apiUrl || `${getApiBaseUrl()}/api/ci/latest-summary`;  // roadmap 1.5 (#1180)
+      const response = await fetch(url);
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const result: CISummaryData = await response.json();
       setData(result);
       setError(null);
       setLastUpdated(new Date());
@@ -270,9 +265,7 @@ export function CIDashboard({
 
         <div className="space-y-2">
           {visibleJobs.map((job, idx) => (
-            // #2736: stable keys — id > started_at > name-composite (আগে key={idx}
-            // ছিল: স্ট্যাটাস-সর্টে সারি পুনঃ-সাজালে ভিজ্যুয়াল সোয়াপ হত)।
-            <JobRow key={job.id ?? job.started_at ?? `${job.name}-${idx}`} job={job} onClick={() => handleJobClick(job)} compact />
+            <JobRow key={idx} job={job} onClick={() => handleJobClick(job)} compact />
           ))}
         </div>
 

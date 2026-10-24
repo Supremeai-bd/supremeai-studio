@@ -151,9 +151,9 @@ const AgentExecutionTelemetryCockpit: React.FC<AgentExecutionTelemetryCockpitPro
               </div>
             ) : (
               <ul className="text-sm">
-                {files.map((file) => (
+                {files.map((file, index) => (
                   <li
-                    key={file}
+                    key={index}
                     className={`py-1 px-2 hover:bg-gray-750 rounded cursor-pointer ${
                       file.trim().endsWith('.tsx') || file.trim().endsWith('.py') ? 'text-green-400' :
                       file.trim().endsWith('/') ? 'text-blue-400 font-medium' : 'text-gray-300'
@@ -177,9 +177,7 @@ const AgentExecutionTelemetryCockpit: React.FC<AgentExecutionTelemetryCockpitPro
               <div className="flex-1 overflow-y-auto mb-2">
                 {shellHistory.map((entry, index) => (
                   <div
-                    // #2736: append-only হিস্ট্রি — content+position কী (duplicate
-                    // কমান্ড-লাইনেও ইউনিক; রি-অর্ডার হয় না, তবু index-এর চেয়ে স্থিতিশীল)।
-                    key={`${entry}|${index}`}
+                    key={index}
                     className={`py-1 ${entry.startsWith('$') ? 'text-green-400' : 'text-gray-300'}`}
                   >
                     {entry}

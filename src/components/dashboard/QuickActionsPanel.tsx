@@ -2,7 +2,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Zap, Dna, Globe, Sparkles } from 'lucide-react';
 import { SpotlightCard } from '../ui/SpotlightCard';
-import { useToast } from '../../contexts/useToast';
 
 export interface QuickActionItem {
   id: string;
@@ -20,9 +19,6 @@ interface QuickActionsPanelProps {
 
 export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ className = '' }) => {
   const navigate = useNavigate();
-  // #2736: আগে 'supremeai-notification' CustomEvent ছিল — শ্রোতা-শূন্য (dead-end)।
-  // এখন আসল ToastProvider-এর মাধ্যমে ব্যবহারকারীকে দৃশ্যমান ফিডব্যাক।
-  const { showToast } = useToast();
 
   const actions: QuickActionItem[] = [
     {
@@ -32,7 +28,11 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ className 
       icon: Zap,
       color: 'cyan',
       action: () => {
-        showToast('info', 'Self-Healer Loop Triggered. All background connections healthy.');
+        window.dispatchEvent(
+          new CustomEvent('supremeai-notification', {
+            detail: { message: 'Self-Healer Loop Triggered. All background connections healthy.' },
+          })
+        );
       },
     },
     {
@@ -58,7 +58,11 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ className 
       icon: Sparkles,
       color: 'purple',
       action: () => {
-        showToast('info', 'Codebase Gap Audit running across 52 knowledge domains.');
+        window.dispatchEvent(
+          new CustomEvent('supremeai-notification', {
+            detail: { message: 'Codebase Gap Audit running across 52 knowledge domains.' },
+          })
+        );
       },
     },
   ];

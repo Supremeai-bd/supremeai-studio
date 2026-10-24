@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, Badge } from '../ui';
 import { Smartphone, Tablet, RefreshCw } from 'lucide-react';
 import { getApiBaseUrl } from '../../utils/api';
-import { apiClient } from '../../services/apiClient';
+import { getAuthHeaders } from '../../services/apiClient';
 
 // Issue #1669 (CRITICAL): JWT কখনো iframe URL-এ যায় না। প্রতিটি external
 // render-এর আগে header-auth দিয়ে POST /api/browser/render-ticket কল হয়;
@@ -10,9 +10,11 @@ import { apiClient } from '../../services/apiClient';
 // JWT/history/log-leak-এর কোনো পথ নেই।
 const fetchRenderTicket = async (): Promise<string | null> => {
   try {
-    // Issue #2522: raw fetch -> apiClient.stream — raw Response দরকার (status +
-    // json), auth/timeout/queue অটোমেটিক।
-    const res = await apiClient.stream('/api/browser/render-ticket', { method: 'POST' });
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${getApiBaseUrl()}/api/browser/render-ticket`, {
+      method: 'POST',
+      headers,
+    });
     if (!res.ok) return null;
     const data: unknown = await res.json();
     const t = (data as { ticket?: unknown })?.ticket;
@@ -49,16 +51,9 @@ export function MobileSimulator({ html, url = '' }: MobileSimulatorProps) {
     }
     let cancelled = false;
     setTicket(null);
-    fetchRenderTicket()
-      .then(t => {
-        if (!cancelled) setTicket(t);
-      })
-      .catch((err: unknown) => {
-        // বাংলা মন্তব্য (#2478): unhandled rejection না হয় — টিকেট ছাড়া নিরাপদ
-        // ডিগ্রেডেশন (প্রক্সি-লোডিং চলবে, শুধু টিকেট তথ্য অনুপস্থিত)।
-        console.error('[MobileSimulator] render-ticket fetch failed:', err);
-        if (!cancelled) setTicket(null);
-      });
+    fetchRenderTicket().then(t => {
+      if (!cancelled) setTicket(t);
+    });
     return () => {
       cancelled = true;
     };

@@ -10,7 +10,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
-import { sanitizeHighlighted } from '../../lib/sanitize';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -61,9 +60,12 @@ function highlightMatch(text: string, query: string): string {
   );
 }
 
-// SECURITY FIX (#2509): the previous regex strip kept every attribute on <mark>
-// (e.g. `onmouseover=alert(1)`). Replaced by the shared DOMPurify allowlist
-// (ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: ['class']) — see src/lib/sanitize.ts.
+/** Allow only <mark> tags from backend-provided highlighted strings. */
+function sanitizeHighlighted(html: string): string {
+  // Strip every HTML tag except <mark> and </mark>.
+  return html.replace(/<(?!\/?mark\b)[^>]+>/gi, '');
+}
+
 
 function formatScore(score: number): string {
   return `${Math.round(score * 100)}%`;
