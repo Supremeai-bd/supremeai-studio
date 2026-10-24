@@ -1,8 +1,5 @@
 name: deploy-pages
-# বাংলা মন্তব্য: Cloudflare Pages স্বয়ংক্রিয় ডিপ্লয়মেন্ট পাইপলাইন
-# main ব্রাঞ্চে কোড পুশ বা সিঙ্ক হওয়ামাত্রই স্বয়ংক্রিয়ভাবে বিল্ড হয়ে Cloudflare Pages-এ ডিপ্লয় হবে।
-# manual rerun এর জন্য workflow_dispatch অন্তর্ভুক্ত রয়েছে।
-
+# Cloudflare Pages deployment pipeline with strict CI gate
 on:
   push:
     branches: [main]
@@ -13,30 +10,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Build & Deploy to Cloudflare Pages
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  verify:
+    name: Verify & Build Studio
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Build Studio
         env:
-          VITE_SUPREMEAI_API_URL: https://supremeai-api-ulw0.onrender.com
+          VITE_SUPREMEAI_API_URL: ${{ secrets.VITE_SUPREMEAI_API_URL || 'https://supremeai-api-ulw0.onrender.com' }}
         run: pnpm build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-dist
+          path: dist
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: studio-dist
+          path: dist
 
       - name: Deploy to Cloudflare Pages
         env:

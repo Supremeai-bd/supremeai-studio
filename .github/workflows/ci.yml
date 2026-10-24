@@ -1,22 +1,46 @@
 name: ci
-# বাংলা মন্তব্য: Studio public CI — lint + typecheck (§14 gate: প্রাইভেট সোর্স ছাড়াই build হওয়া লাগবে)
+# Studio CI — Typecheck, Lint, Test, and Build with Node 22
 on:
   push:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-studio-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v5
-      - uses: actions/setup-node@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          node-version: 20
+          version: 9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile=false
-      - name: typecheck
-        run: pnpm typecheck
-      - name: lint
-        run: pnpm lint
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
