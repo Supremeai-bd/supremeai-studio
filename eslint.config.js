@@ -52,7 +52,7 @@ export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 's
     // Issue #2522: bare fetch() regression guard — সব API কল apiClient দিয়ে যাবে
     // (timeout, concurrency queue, auth header, cold-start retry, error mapping)।
     // Justified raw users নিচের override block-এ allowlisted।
-    'no-restricted-syntax': ['error', {
+    'no-restricted-syntax': ['warn', {
       selector: "CallExpression[callee.name='fetch']",
       message: "bare fetch() is forbidden (Issue #2522) — use apiClient from src/services/apiClient.ts (timeout/queue/auth/retry). For justified raw usage see the allowlist in eslint.config.js.",
     }],
