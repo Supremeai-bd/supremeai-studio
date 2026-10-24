@@ -1,76 +1,205 @@
-import { useState } from 'react';
-import { useApprovalQueue, useApprovalDecision } from '../../../data/hooks';
-import type { ApprovalItem } from '../../../types/approval';
-import { ConfirmModal, StatusPill, EmptyState } from '../../kit';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../../services/apiClient';
+import { adminTokenStore } from '../../../services/adminTokenStore';
 
-type DecisionMode = 'approve' | 'reject' | 'cancel';
+interface PendingApproval {
+  id?: string;
+  task_id?: string;
+  proposed_action?: string;
+  action?: string;
+  target?: string;
+  requester?: string;
+  requester_id?: string;
+  status?: string;
+  expires_at?: string | number;
+  created_at?: string | number;
+  [key: string]: unknown;
+}
+
+const getId = (a: PendingApproval): string => String(a.id ?? a.task_id ?? '');
 
 export function ApprovalQueue() {
-  const { data: approvals, isLoading, isError, error } = useApprovalQueue();
-  const decision = useApprovalDecision();
-  const [selected, setSelected] = useState<{ item: ApprovalItem; mode: DecisionMode } | null>(null);
-  const [reason, setReason] = useState('');
+  const qc = useQueryClient();
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const close = () => {
-    setSelected(null);
-    setReason('');
-    setOtp('');
-  };
+  const hasToken = () => !!adminTokenStore.getDecodedToken();
 
-  const submit = () => {
-    if (!selected || (selected.mode === 'reject' && !reason.trim()) || (selected.mode === 'approve' && !otp.trim())) return;
-    decision.mutate(
-      { id: selected.item.id, action: selected.mode, reason: reason.trim(), otp: otp.trim() },
-      { onSuccess: close },
-    );
-  };
+  const { data, isLoading, error: fetchError, refetch } = useQuery({
+    queryKey: ['hitl-pending'],
+    queryFn: () => apiClient.get<PendingApproval[] | { records?: PendingApproval[]; approvals?: PendingApproval[] }>('/api/v1/hitl/pending'),
+    enabled: hasToken(),
+    refetchInterval: 15_000,
+  });
 
-  if (!approvals && isLoading) return <EmptyState title="অ্যাপ্রোভাল লোড হচ্ছে..." message="অ্যাপ্রোভাল কিউ ফেচ করা হচ্ছে..." loading />;
+  const approvals: PendingApproval[] = Array.isArray(data)
+    ? data
+    : (data as { records?: PendingApproval[]; approvals?: PendingApproval[] })?.records
+      || (data as { approvals?: PendingApproval[] })?.approvals
+      || [];
+
+  const approveMutation = useMutation({
+    mutationFn: ({ id, otpCode }: { id: string; otpCode: string }) =>
+      apiClient.post(`/api/v1/hitl/approve/${encodeURIComponent(id)}`, { resolved_by: 'admin', reason: reason || null, otp: otpCode || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hitl-pending'] });
+      setActiveId(null);
+      setOtp('');
+      setReason('');
+      setError(null);
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, r }: { id: string; r: string }) =>
+      apiClient.post(`/api/v1/hitl/reject/${encodeURIComponent(id)}`, { resolved_by: 'admin', reason: r }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hitl-pending'] });
+      setActiveId(null);
+      setReason('');
+      setError(null);
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: ({ id, r }: { id: string; r: string }) =>
+      apiClient.post(`/api/v1/hitl/cancel/${encodeURIComponent(id)}`, { resolved_by: 'admin', reason: r }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hitl-pending'] });
+      setActiveId(null);
+      setReason('');
+      setError(null);
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+  });
+
+  const fetchErrorMessage = fetchError
+    ? (fetchError instanceof Error ? fetchError.message : String(fetchError))
+    : null;
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-sm font-mono uppercase tracking-widest text-[var(--sa-text-2)]">Approval Queue</h2>
-      {isError && <div role="alert" className="rounded border border-[#ef4444]/40 p-3 text-xs font-mono text-[#ef4444]">অ্যাপ্রোভাল লোড করা যায়নি: {(error as Error)?.message}</div>}
-      <div className="rounded-xl border border-[var(--sa-line)] bg-[var(--sa-bg-1)] overflow-hidden">
-        <div className="divide-y divide-[var(--sa-line)]">
-          {(approvals ?? []).map((item) => (
-            <div key={item.id} className="p-4 flex items-center justify-between gap-4">
-              <div className="min-w-0 space-y-1">
-                <div className="text-[10px] font-mono text-[var(--sa-text-0)]">{item.action}</div>
-                <div className="truncate text-[9px] font-mono text-[var(--sa-text-2)]">Target: {item.target ?? '—'} · By: {item.requested_by ?? 'system'}</div>
-                <div className="text-[9px] font-mono text-[var(--sa-text-3)]">{item.reason || 'No reason provided'}</div>
-                {item.execution_status && item.execution_status !== 'pending' && <div className="text-[9px] font-mono text-[var(--sa-text-2)]">Execution: {item.execution_status}{item.execution_error ? ` — ${item.execution_error}` : ''}</div>}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <StatusPill status={item.status === 'pending' ? 'busy' : item.status === 'approved' || item.status === 'executed' ? 'healthy' : 'down'} label={item.status.toUpperCase()} size="sm" />
-                {item.status === 'pending' && <div className="flex gap-1">
-                  <button onClick={() => setSelected({ item, mode: 'approve' })} className="px-2 py-1 rounded border border-[#10b981]/30 text-[#10b981] text-[9px] font-mono hover:bg-[#10b981]/10">APPROVE</button>
-                  <button onClick={() => setSelected({ item, mode: 'reject' })} className="px-2 py-1 rounded border border-[#ef4444]/30 text-[#ef4444] text-[9px] font-mono hover:bg-[#ef4444]/10">REJECT</button>
-                  <button onClick={() => setSelected({ item, mode: 'cancel' })} className="px-2 py-1 rounded border border-[var(--sa-line)] text-[var(--sa-text-2)] text-[9px] font-mono">CANCEL</button>
-                </div>}
-              </div>
-            </div>
-          ))}
-          {(approvals ?? []).length === 0 && <div className="p-4 text-center text-[var(--sa-text-2)] text-[10px] font-mono">কোন অ্যাপ্রোভাল নেই</div>}
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-[var(--sa-ink-muted)]">
+          {approvals.length} pending
+        </span>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="text-xs text-cyan-300 hover:text-cyan-200"
+        >
+          Refresh
+        </button>
       </div>
-      <ConfirmModal
-        open={!!selected}
-        title={selected?.mode === 'approve' ? 'অ্যাপ্রোভ করুন' : selected?.mode === 'reject' ? 'রিজেক্ট করুন' : 'ক্যানসেল করুন'}
-        message={selected?.mode === 'approve' ? 'Execution শুরু করতে OTP দিন' : 'এই সিদ্ধান্তের কারণ দিন'}
-        confirmLabel={selected?.mode === 'approve' ? 'APPROVE' : selected?.mode === 'reject' ? 'REJECT' : 'CANCEL'}
-        danger={selected?.mode !== 'approve'}
-        loading={decision.isPending}
-        onCancel={close}
-        onConfirm={submit}
-      >
-        <div className="space-y-3 mb-5">
-          {selected?.mode === 'approve' && <label className="block text-[10px] font-mono text-[var(--sa-text-2)]">OTP<input value={otp} onChange={(event) => setOtp(event.target.value)} aria-label="Approval OTP" className="mt-1 w-full rounded border border-[var(--sa-line)] bg-transparent px-3 py-2 text-xs text-[var(--sa-text-0)]" /></label>}
-          {selected?.mode !== 'approve' && <label className="block text-[10px] font-mono text-[var(--sa-text-2)]">Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Decision reason" className="mt-1 w-full rounded border border-[var(--sa-line)] bg-transparent px-3 py-2 text-xs text-[var(--sa-text-0)]" rows={3} /></label>}
-          {decision.isError && <div role="alert" className="text-[10px] font-mono text-[#ef4444]">{(decision.error as Error)?.message}</div>}
+
+      {fetchErrorMessage && (
+        <div className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+          Approval fetch failed: {fetchErrorMessage}
         </div>
-      </ConfirmModal>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+          {error}
+        </div>
+      )}
+
+      {isLoading && approvals.length === 0 && (
+        <div className="text-xs text-[var(--sa-ink-muted)]">Loading approvals…</div>
+      )}
+
+      {!isLoading && approvals.length === 0 && !fetchErrorMessage && (
+        <div className="rounded-xl border border-dashed border-[var(--sa-border)] p-6 text-center text-xs text-[var(--sa-ink-muted)]">
+          No pending approvals.
+        </div>
+      )}
+
+      <ul className="space-y-3">
+        {approvals.map((a) => {
+          const id = getId(a);
+          const isActive = activeId === id;
+          return (
+            <li key={id} className="rounded-xl border border-[var(--sa-border)] bg-black/20 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--sa-ink)] truncate">
+                    {String(a.proposed_action ?? a.action ?? 'Pending action')}
+                  </p>
+                  <p className="text-xs text-[var(--sa-ink-muted)]">
+                    {a.target ? `target: ${String(a.target)} · ` : ''}
+                    {a.requester ? `requester: ${String(a.requester)} · ` : ''}
+                    {a.status ? `status: ${String(a.status)}` : ''}
+                  </p>
+                  {a.expires_at && (
+                    <p className="text-xs text-[var(--sa-ink-muted)]">
+                      expires: {String(a.expires_at)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveId(isActive ? null : id)}
+                  className="text-xs text-cyan-300 hover:text-cyan-200"
+                >
+                  {isActive ? 'Close' : 'Decide'}
+                </button>
+              </div>
+
+              {isActive && (
+                <div className="mt-3 space-y-2">
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="OTP code (required to approve)"
+                    className="w-full rounded-lg border border-[var(--sa-border)] bg-black/30 px-3 py-2 text-xs text-[var(--sa-ink)]"
+                  />
+                  <textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Reason (required to reject/cancel)"
+                    className="w-full rounded-lg border border-[var(--sa-border)] bg-black/30 px-3 py-2 text-xs text-[var(--sa-ink)]"
+                    rows={2}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={approveMutation.isPending || !otp.trim()}
+                      onClick={() => approveMutation.mutate({ id, otpCode: otp.trim() })}
+                      className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 disabled:opacity-50"
+                    >
+                      {approveMutation.isPending ? 'Approving…' : 'Approve (OTP)'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={rejectMutation.isPending || !reason.trim()}
+                      onClick={() => rejectMutation.mutate({ id, r: reason.trim() })}
+                      className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-1.5 text-xs font-semibold text-rose-200 disabled:opacity-50"
+                    >
+                      {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cancelMutation.isPending}
+                      onClick={() => cancelMutation.mutate({ id, r: reason.trim() || 'cancelled' })}
+                      className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 disabled:opacity-50"
+                    >
+                      {cancelMutation.isPending ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
+
+export default ApprovalQueue;
