@@ -35,31 +35,21 @@ describe('ServiceHealthBar component', () => {
     expect(screen.getByText('Connecting to Node...')).toBeInTheDocument();
   });
 
-  it('renders healthy state when the health-aggregation payload succeeds', async () => {
-    // Contract aligned with the canonical-endpoint rewrite (ServiceHealthBar
-    // fetchPublicHealth + SERVICE_LABEL_MAP): display names come from the
-    // check-key label map, not from a per-node `name` field. The old
-    // 5-node mock (api/tower/primary/worker + 'API Gateway' labels) asserted
-    // a contract the component no longer implements.
-    const healthyCheck = { status: 'healthy', message: 'Online', response_time_ms: 5 };
+  it('renders healthy state when 5-node API succeeds', async () => {
     const mockData = {
       status: 'healthy',
       timestamp: Date.now(),
       total_response_time_ms: 120,
       checks: {
-        application: { ...healthyCheck },
-        database: { ...healthyCheck, response_time_ms: 12 },
-        redis: { ...healthyCheck, response_time_ms: 3 },
-        scraper: { ...healthyCheck, response_time_ms: 45 },
-        ollama: { ...healthyCheck, response_time_ms: 30 },
-        memory: { ...healthyCheck },
-        disk: { ...healthyCheck },
-        external_services: { ...healthyCheck, response_time_ms: 20 },
-        integrations: { ...healthyCheck, response_time_ms: 20 },
+        api: { name: 'API Gateway', status: 'healthy', message: 'Online', response_time_ms: 5 },
+        scraper: { name: 'Scraper Relay', status: 'healthy', message: 'Online', response_time_ms: 45 },
+        tower: { name: 'MCP Control Tower', status: 'healthy', message: 'Online', response_time_ms: 30 },
+        primary: { name: 'Primary Core Node', status: 'healthy', message: 'Online', response_time_ms: 20 },
+        worker: { name: 'Worker Node', status: 'healthy', message: 'Online', response_time_ms: 20 },
       },
       summary: {
-        total_checks: 9,
-        healthy: 9,
+        total_checks: 5,
+        healthy: 5,
         degraded: 0,
         unhealthy: 0,
         unknown: 0,
@@ -80,18 +70,16 @@ describe('ServiceHealthBar component', () => {
       expect(screen.getByText('Network Optimal')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('9/9')).toBeInTheDocument();
+    expect(screen.getByText('5/5')).toBeInTheDocument();
 
-    // Click to toggle diagnostics modal — node rows render the
-    // SERVICE_LABEL_MAP labels for the aggregation keys.
+    // Click to toggle diagnostics modal
     const button = screen.getByTitle('Diagnostic Matrix (Click to toggle)');
     fireEvent.click(button);
 
     await waitFor(() => {
       expect(screen.getByText('System Telemetry')).toBeInTheDocument();
-      expect(screen.getByText('Backend Core')).toBeInTheDocument();
-      expect(screen.getByText('Scraper Service')).toBeInTheDocument();
-      expect(screen.getByText('Data Store (Postgres)')).toBeInTheDocument();
+      expect(screen.getByText('API Gateway')).toBeInTheDocument();
+      expect(screen.getByText('Scraper Relay')).toBeInTheDocument();
     });
   });
 

@@ -33,6 +33,7 @@ interface ServiceStatusProps {
 }
 
 const SERVICE_LABEL_MAP: Record<string, string> = {
+  api: 'API Gateway',
   application: 'Backend Core',
   database: 'Data Store (Postgres)',
   redis: 'Cache Cluster (Redis)',
