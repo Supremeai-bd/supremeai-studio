@@ -157,10 +157,12 @@ export const OperatorCockpit: React.FC = () => {
   );
 };
 
-const PublicPageShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const PublicPageShell: React.FC<{ children: React.ReactNode; fullWidth?: boolean }> = ({ children, fullWidth = false }) => (
   <PublicLayout>
     <PublicHeader />
-    <div className="pt-16 sm:pt-20 px-4 pb-12 max-w-feed mx-auto">{children}</div>
+    <div className={`pt-16 sm:pt-20 px-3 sm:px-6 pb-12 mx-auto w-full transition-all duration-200 ${fullWidth ? 'max-w-7xl' : 'max-w-feed'}`}>
+      {children}
+    </div>
   </PublicLayout>
 );
 
@@ -197,18 +199,7 @@ export const App: React.FC = () => {
           <React.Suspense fallback={<RouteFallback />}>
             <Routes>
               {/* Public Visitor Funnel — Cosmic landing at / (Zero-blocking; renders immediately without auth checks) */}
-              <Route
-                path="/"
-                element={
-                  <PublicPageShell>
-                    <GuestDashboard
-                      language="bn"
-                      onSwitchToUser={() => { window.location.href = '/register'; }}
-                    />
-                  </PublicPageShell>
-                }
-              />
-              <Route path="/landing" element={<LandingPage />} />
+              <Route path="/" element={<LandingPage />} />
               <Route path="/about" element={<OurStoryPage />} />
               <Route path="/chat" element={<LiveChatPage />} />
               <Route path="/features" element={<PublicPageShell><FeaturesPage /></PublicPageShell>} />
@@ -225,7 +216,7 @@ export const App: React.FC = () => {
               <Route
                 path="/playground"
                 element={
-                  <PublicPageShell>
+                  <PublicPageShell fullWidth>
                     <GuestDashboard
                       language="bn"
                       onSwitchToUser={() => { window.location.href = '/register'; }}
