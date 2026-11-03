@@ -25,7 +25,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 
-export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 'src/dataconnect-generated', 'coverage', 'node_modules'] }, {
+export default tseslint.config({ ignores: ['dist', 'dist-admin', 'dist-user', 'src/dataconnect-generated', 'coverage', 'node_modules', 'src/cockpit/**'] }, {
   extends: [
     js.configs.recommended,
     ...tseslint.configs.recommended,
