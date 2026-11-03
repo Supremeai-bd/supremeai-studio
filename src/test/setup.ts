@@ -47,6 +47,11 @@ Object.defineProperty(global, 'EventSource', {
 // টেস্ট শেষ হওয়ার পরেও promise settle হওয়ায় "Unhandled Rejection" হিসেবে ধরা পড়ে (CI job fail করে)।
 // তাই ডিফল্ট একটি resolved fetch mock দেওয়া হলো, যাতে real network/AbortSignal validation স্পর্শ না হয়।
 // যেসব টেস্ট নিজে global.fetch = vi.fn(...) সেট করে (যেমন apiClient.test.ts), তারা এটিকে override করবে।
+// Polyfill scrollIntoView for jsdom
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 Object.defineProperty(global, 'fetch', {
   value: vi.fn(() =>
     Promise.resolve({
