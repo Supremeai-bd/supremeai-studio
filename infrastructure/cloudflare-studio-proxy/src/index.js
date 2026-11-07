@@ -18,7 +18,7 @@ const RENDER_SERVICES = [
   { name: "primary", url: "https://supremeai-primary-node-5xso.onrender.com/health" },
   { name: "worker", url: "https://supremeai-worker-node.onrender.com/health" },
   { name: "scraper", url: "https://supremeai-scraper-node.onrender.com/health" },
-  { name: "brain", url: "https://supremeai-primary-node.onrender.com/health" },
+  { name: "brain", url: "https://supremeai-tiny-brain.onrender.com/health" },
 ];
 
 const CORS_HEADERS = {
@@ -111,11 +111,25 @@ export default {
         edge: "cloudflare-dac-edge",
         origin: ORIGIN,
         api: API_ORIGIN,
+        commit: env?.CF_COMMIT_SHA || env?.GITHUB_SHA || "unknown",
+        version: env?.APP_VERSION || "1.0.0",
         keepwarm: {
           cron: "*/10 * * * *",
           targets: RENDER_SERVICES.map((s) => s.name),
         },
         timestamp: new Date().toISOString()
+      }), {
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS }
+      });
+    }
+
+    // 1b. Release metadata endpoint (aligned with Pure 2-Repo runtime contract)
+    if (url.pathname === "/release") {
+      return new Response(JSON.stringify({
+        service: "cloudflare-studio-proxy",
+        commit: env?.CF_COMMIT_SHA || env?.GITHUB_SHA || "unknown",
+        version: env?.APP_VERSION || "1.0.0",
+        timestamp: new Date().toISOString(),
       }), {
         headers: { "Content-Type": "application/json", ...CORS_HEADERS }
       });

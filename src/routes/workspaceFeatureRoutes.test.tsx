@@ -90,12 +90,10 @@ describe('Phase 0 engine routes (#1521): guest vs authenticated accessibility', 
         permissions: [],
       });
       renderRoutesAt(path);
-      await waitFor(
-        () =>
-          expect(
-            screen.getByRole('heading', { name: heading }),
-          ).toBeInTheDocument(),
-        { timeout: 5000 },
+      await waitFor(() =>
+        expect(
+          screen.getByRole('heading', { name: heading }),
+        ).toBeInTheDocument(),
       );
     },
   );

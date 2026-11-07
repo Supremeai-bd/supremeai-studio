@@ -12,13 +12,11 @@ import { JarvisOnboardingModal } from '../components/jarvis/JarvisOnboardingModa
 // (Refs #861) ব্যবহার করা হচ্ছে; চ্যাট লজিক / webhook-only ম্যান্ডেট অপরিবর্তিত।
 
 export const publicLinks = [
-  // ROOT-CAUSE FIX (guest nav misdirection, 2026-10-23): 'Chat' pointed at '/'
-  // (the landing page) and Models/Features/Pricing/Docs pointed at duplicate
-  // GuestChat alias pages — every nav item dumped guests into the same chat.
-  // Chat now targets /chat; the duplicate alias links are removed from the nav
-  // (their routes remain for direct URLs / backward compatibility).
+  { to: '/features', label: 'Features' },
+  { to: '/models', label: 'Models' },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/docs', label: 'Docs' },
   { to: '/chat', label: 'Chat' },
-  { to: '/about', label: 'About' },
 ];
 
 export const capabilityItems = [
